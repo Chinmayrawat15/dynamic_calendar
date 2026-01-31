@@ -72,7 +72,7 @@ Guidelines:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    f"{self.base_url}/api/chat/completions",
+                    f"{self.base_url}/chat/completions",
                     headers=self._get_headers(),
                     json={
                         "model": "gpt-4o-mini",
