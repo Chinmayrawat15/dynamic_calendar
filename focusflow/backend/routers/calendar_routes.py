@@ -5,7 +5,7 @@ Calendar Router - Handles Google Calendar integration.
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session as DBSession
 from datetime import datetime, timedelta
-
+from fastapi.responses import RedirectResponse, HTMLResponse
 from models import CalendarEventsResponse, CalendarEvent, CreateEventRequest, CreateEventResponse
 from database import get_db
 from services.calendar_service import CalendarService
@@ -21,59 +21,15 @@ async def get_calendar_events(
 ):
     """
     Get calendar events for a date range.
-
-    Returns events with predicted durations when available.
-
-    TODO: Person D - Replace mock with real Google Calendar API
     """
-    # STUB: Log the request
-    print(f"📅 Calendar request: {start} to {end}")
-
-    # TODO: Person D - Use real calendar service
-    # service = CalendarService()
-    # events = await service.get_events(start, end)
-    # return CalendarEventsResponse(events=events)
-
-    # MOCK: Return sample calendar events
-    mock_events = [
-        CalendarEvent(
-            id="evt_1",
-            title="Team Standup",
-            start="2026-01-31T09:00:00Z",
-            end="2026-01-31T09:30:00Z",
-            predicted_duration=25
-        ),
-        CalendarEvent(
-            id="evt_2",
-            title="Code Review Session",
-            start="2026-01-31T10:00:00Z",
-            end="2026-01-31T11:00:00Z",
-            predicted_duration=55
-        ),
-        CalendarEvent(
-            id="evt_3",
-            title="Feature Development",
-            start="2026-01-31T14:00:00Z",
-            end="2026-01-31T16:00:00Z",
-            predicted_duration=None  # No prediction available
-        ),
-        CalendarEvent(
-            id="evt_4",
-            title="1:1 with Manager",
-            start="2026-02-01T11:00:00Z",
-            end="2026-02-01T11:30:00Z",
-            predicted_duration=30
-        ),
-        CalendarEvent(
-            id="evt_5",
-            title="Sprint Planning",
-            start="2026-02-03T13:00:00Z",
-            end="2026-02-03T15:00:00Z",
-            predicted_duration=110
-        ),
-    ]
-
-    return CalendarEventsResponse(events=mock_events)
+    service = CalendarService()
+    
+    # If not authenticated, return empty list (frontend should handle auth prompt)
+    if not service.is_authenticated():
+        return CalendarEventsResponse(events=[])
+        
+    events = await service.get_events(start, end)
+    return CalendarEventsResponse(events=events)
 
 
 @router.post("/calendar", response_model=CreateEventResponse)
@@ -83,31 +39,17 @@ async def create_calendar_event(
 ):
     """
     Create a new calendar event.
-
-    TODO: Person D - Replace mock with real Google Calendar API
     """
-    # STUB: Log the request
-    print(f"📅 Create event: {request.title}")
-    print(f"   Start: {request.start}")
-    print(f"   End: {request.end}")
-
-    # TODO: Person D - Use real calendar service
-    # service = CalendarService()
-    # event = await service.create_event(
-    #     title=request.title,
-    #     start=request.start,
-    #     end=request.end,
-    #     description=request.description
-    # )
-    # return CreateEventResponse(event_id=event.id, url=event.url)
-
-    # MOCK: Return fake event creation response
-    import uuid
-    event_id = f"evt_{uuid.uuid4().hex[:8]}"
-
+    service = CalendarService()
+    event = await service.create_event(
+        title=request.title,
+        start=request.start,
+        end=request.end,
+        description=request.description
+    )
     return CreateEventResponse(
-        event_id=event_id,
-        url=f"https://calendar.google.com/calendar/event?eid={event_id}"
+        event_id=event.get("id"),
+        url=event.get("url", "")
     )
 
 
@@ -115,25 +57,39 @@ async def create_calendar_event(
 async def calendar_auth():
     """
     Initiate Google Calendar OAuth flow.
-
-    TODO: Person D - Implement OAuth redirect
     """
-    # MOCK: Return instructions
-    return {
-        "status": "not_implemented",
-        "message": "OAuth flow not yet implemented. See docs/GOOGLE_CALENDAR_SETUP.md"
-    }
+    service = CalendarService()
+    try:
+        auth_url = service.get_auth_url()
+        return RedirectResponse(url=auth_url)
+    except Exception as e:
+        return {"error": str(e)}
 
 
-@router.get("/calendar/callback")
+@router.get("/calendar/callback", response_class=HTMLResponse)
 async def calendar_callback(code: str = Query(...)):
     """
     Handle Google Calendar OAuth callback.
-
-    TODO: Person D - Implement OAuth token exchange
     """
-    # MOCK: Return instructions
-    return {
-        "status": "not_implemented",
-        "message": "OAuth callback not yet implemented."
-    }
+    service = CalendarService()
+    success = service.handle_callback(code)
+    
+    if success:
+        return """
+        <html>
+            <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+                <h1 style="color: green;">Authentication Successful!</h1>
+                <p>FocusFlow is now connected to your Google Calendar.</p>
+                <p>You can close this window and return to the application.</p>
+            </body>
+        </html>
+        """
+    else:
+        return """
+        <html>
+            <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+                <h1 style="color: red;">Authentication Failed</h1>
+                <p>Please check the backend logs for details.</p>
+            </body>
+        </html>
+        """
