@@ -1,0 +1,267 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 400px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.container {
+  padding: 16px;
+}
+
+h1 {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: #1a1a1a;
+}
+
+h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Task Section */
+.task-section {
+  margin-bottom: 20px;
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.task-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#taskInput {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+#taskInput:focus {
+  outline: none;
+  border-color: #4CAF50;
+}
+
+.button-group {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-start {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.btn-start:hover:not(:disabled) {
+  background-color: #45a049;
+}
+
+.btn-end {
+  background-color: #f44336;
+  color: white;
+}
+
+.btn-end:hover:not(:disabled) {
+  background-color: #da190b;
+}
+
+.btn-secondary {
+  background-color: #2196F3;
+  color: white;
+  width: 100%;
+}
+
+.btn-secondary:hover {
+  background-color: #0b7dda;
+}
+
+.current-task {
+  margin-top: 12px;
+  padding: 10px;
+  background-color: #e8f5e9;
+  border-left: 4px solid #4CAF50;
+  border-radius: 4px;
+  font-size: 14px;
+  display: none;
+}
+
+.current-task.active {
+  display: block;
+}
+
+.current-task strong {
+  color: #2e7d32;
+}
+
+/* Statistics Section */
+.stats-section {
+  margin-bottom: 20px;
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.stat-card:last-child {
+  border-bottom: none;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #666;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+/* Site Time Section */
+.site-time-section {
+  margin-bottom: 20px;
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.site-list {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.site-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.site-item:last-child {
+  border-bottom: none;
+}
+
+.site-name {
+  font-size: 13px;
+  color: #333;
+  font-weight: 500;
+}
+
+.site-time {
+  font-size: 13px;
+  color: #2196F3;
+  font-weight: 600;
+}
+
+/* Recent Activity Section */
+.recent-section {
+  margin-bottom: 20px;
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.recent-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.recent-item {
+  padding: 8px;
+  margin-bottom: 6px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.recent-item:last-child {
+  margin-bottom: 0;
+}
+
+.recent-time {
+  color: #999;
+  font-size: 11px;
+  margin-bottom: 3px;
+}
+
+.recent-url {
+  color: #333;
+  word-break: break-all;
+}
+
+/* Settings Section */
+.settings-section {
+  margin-bottom: 10px;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  color: #999;
+  font-size: 13px;
+  padding: 20px 0;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
