@@ -1,281 +1,246 @@
-/**
- * FocusFlow Background Service Worker
- * Handles tab tracking, activity logging, and data sync.
- *
- * TODO: Person A - Implement real tab tracking and activity logging
- */
+// Background service worker for Activity Tracker
 
-// Configuration
-const CONFIG = {
-  API_URL: "http://localhost:8000",
-  SYNC_INTERVAL_MINUTES: 0.5, // 30 seconds
-  TAB_SWITCH_THRESHOLD: 10, // Tab switches before focus drops
+let currentTabId = null;
+let currentUrl = null;
+let sessionStartTime = null;
+let currentTask = null;
+let taskStartTime = null;
+
+// Activity data structure
+let activityData = {
+  tabSwitches: [],
+  siteTime: {},
+  taskSessions: []
 };
 
-// State
-let state = {
-  currentTask: null,
-  isTracking: false,
-  activities: [],
-  tabSwitches: 0,
-  lastTabId: null,
-  sessionStart: null,
-};
-
-// Initialize on install
+// Initialize extension
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("FocusFlow extension installed");
-
-  // Set default storage values
-  chrome.storage.local.set({
-    currentTask: null,
-    isTracking: false,
-    focusScore: 100,
-    trackedSites: ["github.com", "stackoverflow.com", "docs.google.com"],
-    conservativity: 0.5,
-  });
-
-  // Create sync alarm
-  chrome.alarms.create("syncActivity", {
-    periodInMinutes: CONFIG.SYNC_INTERVAL_MINUTES,
-  });
+  console.log('Activity Tracker installed');
+  initializeStorage();
 });
 
-// Handle alarms
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "syncActivity") {
-    syncActivityData();
-  }
-});
-
-// Track tab changes
-// TODO: Person A - Implement real tab tracking
-chrome.tabs.onActivated.addListener((activeInfo) => {
-  if (!state.isTracking) return;
-
-  // Record tab switch
-  if (state.lastTabId !== null && state.lastTabId !== activeInfo.tabId) {
-    state.tabSwitches++;
-    updateFocusScore();
-  }
-  state.lastTabId = activeInfo.tabId;
-
-  // Get tab info
-  chrome.tabs.get(activeInfo.tabId, (tab) => {
-    if (chrome.runtime.lastError || !tab.url) return;
-
-    const activity = createActivityRecord(tab);
-    if (activity) {
-      state.activities.push(activity);
-    }
-  });
-});
-
-// Track URL changes
-// TODO: Person A - Implement URL change tracking
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (!state.isTracking || changeInfo.status !== "complete") return;
-  if (!tab.url || tab.url.startsWith("chrome://")) return;
-
-  const activity = createActivityRecord(tab);
-  if (activity) {
-    // Update or add activity
-    const existingIndex = state.activities.findIndex(
-      (a) => a.url === activity.url
-    );
-    if (existingIndex >= 0) {
-      state.activities[existingIndex].end_time = Date.now();
-      state.activities[existingIndex].duration_ms =
-        state.activities[existingIndex].end_time -
-        state.activities[existingIndex].start_time;
-    } else {
-      state.activities.push(activity);
-    }
-  }
-});
-
-/**
- * Create an activity record from a tab.
- * TODO: Person A - Add domain filtering based on tracked sites
- */
-function createActivityRecord(tab) {
-  if (!tab.url || tab.url.startsWith("chrome://")) return null;
-
-  try {
-    const url = new URL(tab.url);
-    return {
-      url: tab.url,
-      domain: url.hostname,
-      title: tab.title || "Untitled",
-      duration_ms: 0,
-      start_time: Date.now(),
-      end_time: Date.now(),
-    };
-  } catch (e) {
-    return null;
-  }
-}
-
-/**
- * Calculate and update focus score based on tab switches.
- * TODO: Person A - Improve focus score algorithm
- */
-function updateFocusScore() {
-  // Simple algorithm: start at 100, lose 5 points per tab switch
-  const focusScore = Math.max(0, 100 - state.tabSwitches * 5);
-
-  // Update badge
-  updateBadge(focusScore);
-
-  // Store focus score
-  chrome.storage.local.set({ focusScore });
-}
-
-/**
- * Update the extension badge with focus score.
- */
-function updateBadge(focusScore) {
-  // Set badge text
-  chrome.action.setBadgeText({ text: focusScore.toString() });
-
-  // Set badge color based on score
-  let color = "#22c55e"; // Green
-  if (focusScore < 70) color = "#eab308"; // Yellow
-  if (focusScore < 40) color = "#ef4444"; // Red
-
-  chrome.action.setBadgeBackgroundColor({ color });
-}
-
-/**
- * Sync activity data to the backend.
- * TODO: Person A - Implement real API sync
- */
-async function syncActivityData() {
-  if (!state.isTracking || !state.currentTask) {
-    console.log("FocusFlow: Not tracking, skipping sync");
-    return;
-  }
-
-  if (state.activities.length === 0) {
-    console.log("FocusFlow: No activities to sync");
-    return;
-  }
-
-  const focusScore = await new Promise((resolve) => {
-    chrome.storage.local.get(["focusScore"], (result) => {
-      resolve(result.focusScore || 100);
+// Initialize storage with default values
+async function initializeStorage() {
+  const data = await chrome.storage.local.get(['trackedSites', 'activityData']);
+  
+  if (!data.trackedSites) {
+    await chrome.storage.local.set({
+      trackedSites: ['github.com', 'stackoverflow.com', 'youtube.com']
     });
-  });
+  }
+  
+  if (!data.activityData) {
+    await chrome.storage.local.set({ activityData });
+  } else {
+    activityData = data.activityData;
+  }
+}
 
-  const payload = {
-    task_name: state.currentTask,
-    activities: state.activities,
-    tab_switches: state.tabSwitches,
-    focus_score: focusScore,
+// Track tab activation (tab switches)
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  const tab = await chrome.tabs.get(activeInfo.tabId);
+  await handleTabSwitch(tab);
+});
+
+// Track tab updates (URL changes)
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.active) {
+    await handleTabSwitch(tab);
+  }
+});
+
+// Handle tab switches and time tracking
+async function handleTabSwitch(tab) {
+  const now = Date.now();
+  const newUrl = tab.url || '';
+  const newTabId = tab.id;
+  
+  // End tracking on previous tab
+  if (currentUrl && sessionStartTime) {
+    const timeSpent = now - sessionStartTime;
+    await updateSiteTime(currentUrl, timeSpent);
+  }
+  
+  // Log the tab switch
+  const tabSwitch = {
+    timestamp: now,
+    fromTabId: currentTabId,
+    toTabId: newTabId,
+    fromUrl: currentUrl,
+    toUrl: newUrl
   };
+  
+  activityData.tabSwitches.push(tabSwitch);
+  
+  // Update current tracking
+  currentTabId = newTabId;
+  currentUrl = newUrl;
+  sessionStartTime = now;
+  
+  // Save to storage
+  await chrome.storage.local.set({ activityData });
+  
+  console.log('Tab switch:', tabSwitch);
+}
 
-  console.log("FocusFlow: Syncing activity data", payload);
-
+// Update time spent on a site
+async function updateSiteTime(url, timeSpent) {
   try {
-    const response = await fetch(`${CONFIG.API_URL}/api/activity`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      console.log("FocusFlow: Sync successful", data);
-
-      // Clear synced activities
-      state.activities = [];
-    } else {
-      console.error("FocusFlow: Sync failed", response.status);
+    const hostname = new URL(url).hostname;
+    const data = await chrome.storage.local.get('trackedSites');
+    const trackedSites = data.trackedSites || [];
+    
+    // Check if this site should be tracked
+    const isTracked = trackedSites.some(site => hostname.includes(site));
+    
+    if (isTracked) {
+      if (!activityData.siteTime[hostname]) {
+        activityData.siteTime[hostname] = 0;
+      }
+      activityData.siteTime[hostname] += timeSpent;
+      
+      console.log(`Time on ${hostname}: ${activityData.siteTime[hostname]}ms`);
     }
   } catch (error) {
-    console.error("FocusFlow: Sync error", error);
-    // Keep activities for retry
+    console.error('Error updating site time:', error);
   }
-}
-
-/**
- * Start tracking a task.
- */
-function startTracking(taskName) {
-  state = {
-    currentTask: taskName,
-    isTracking: true,
-    activities: [],
-    tabSwitches: 0,
-    lastTabId: null,
-    sessionStart: Date.now(),
-  };
-
-  chrome.storage.local.set({
-    currentTask: taskName,
-    isTracking: true,
-    focusScore: 100,
-  });
-
-  updateBadge(100);
-  console.log("FocusFlow: Started tracking", taskName);
-}
-
-/**
- * Stop tracking.
- */
-function stopTracking() {
-  // Final sync before stopping
-  syncActivityData();
-
-  state = {
-    currentTask: null,
-    isTracking: false,
-    activities: [],
-    tabSwitches: 0,
-    lastTabId: null,
-    sessionStart: null,
-  };
-
-  chrome.storage.local.set({
-    currentTask: null,
-    isTracking: false,
-  });
-
-  chrome.action.setBadgeText({ text: "" });
-  console.log("FocusFlow: Stopped tracking");
 }
 
 // Listen for messages from popup
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  switch (message.action) {
-    case "startTracking":
-      startTracking(message.taskName);
-      sendResponse({ success: true });
-      break;
-
-    case "stopTracking":
-      stopTracking();
-      sendResponse({ success: true });
-      break;
-
-    case "getState":
-      chrome.storage.local.get(
-        ["currentTask", "isTracking", "focusScore"],
-        (result) => {
-          sendResponse({
-            currentTask: result.currentTask,
-            isTracking: result.isTracking,
-            focusScore: result.focusScore || 100,
-            tabSwitches: state.tabSwitches,
-          });
-        }
-      );
-      return true; // Async response
-
-    default:
-      sendResponse({ error: "Unknown action" });
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'startTask') {
+    startTask(request.taskName);
+    sendResponse({ success: true });
+  } else if (request.action === 'endTask') {
+    endTask();
+    sendResponse({ success: true });
+  } else if (request.action === 'getStats') {
+    getStats().then(stats => sendResponse(stats));
+    return true; // Will respond asynchronously
   }
 });
 
-console.log("FocusFlow: Background service worker loaded");
+// Start a task
+function startTask(taskName) {
+  currentTask = taskName;
+  taskStartTime = Date.now();
+  
+  chrome.storage.local.set({
+    currentTask: taskName,
+    taskStartTime: taskStartTime
+  });
+  
+  console.log('Task started:', taskName);
+}
+
+// End a task
+async function endTask() {
+  if (currentTask && taskStartTime) {
+    const taskSession = {
+      taskName: currentTask,
+      startTime: taskStartTime,
+      endTime: Date.now(),
+      duration: Date.now() - taskStartTime,
+      tabSwitches: activityData.tabSwitches.filter(
+        sw => sw.timestamp >= taskStartTime
+      ).length
+    };
+    
+    activityData.taskSessions.push(taskSession);
+    
+    await chrome.storage.local.set({
+      activityData,
+      currentTask: null,
+      taskStartTime: null
+    });
+    
+    currentTask = null;
+    taskStartTime = null;
+    
+    console.log('Task ended:', taskSession);
+  }
+}
+
+// Get current statistics
+async function getStats() {
+  const data = await chrome.storage.local.get(['currentTask', 'taskStartTime']);
+  
+  let currentTaskTime = 0;
+  let currentTaskSwitches = 0;
+  
+  if (data.currentTask && data.taskStartTime) {
+    currentTaskTime = Date.now() - data.taskStartTime;
+    currentTaskSwitches = activityData.tabSwitches.filter(
+      sw => sw.timestamp >= data.taskStartTime
+    ).length;
+  }
+  
+  return {
+    currentTask: data.currentTask || null,
+    currentTaskTime,
+    currentTaskSwitches,
+    totalTabSwitches: activityData.tabSwitches.length,
+    siteTime: activityData.siteTime,
+    recentSwitches: activityData.tabSwitches.slice(-10)
+  };
+}
+
+// Send activity data to server every 30 seconds
+setInterval(async () => {
+  await sendActivityData();
+}, 30000);
+
+// Send activity data to localhost:8000/api/activity CURRENYLY NO NEED FOR THIS 
+async function sendActivityData() {
+  try {
+    const data = await chrome.storage.local.get(['currentTask', 'taskStartTime']);
+    /*
+    const payload = {
+      timestamp: Date.now(),
+      currentTask: data.currentTask || null,
+      taskStartTime: data.taskStartTime || null,
+      tabSwitches: activityData.tabSwitches,
+      siteTime: activityData.siteTime,
+      taskSessions: activityData.taskSessions,
+      currentUrl: currentUrl,
+      currentTabId: currentTabId
+    };
+    */
+   // below is trying to integrate with amishs code
+    const payload = {
+      task_name: data.currentTask || null,
+      domain: currentUrl,
+      title: currentUrl,
+      duration_ms: 99999,
+      focus_score: 50,
+      tab_switches: 5,
+      timestamp: Date.now(),
+    };
+    // task_name, domain, title, duration_ms, focus_score
+    // tab_switches, timestamp
+    
+    const response = await fetch('http://localhost:8000/api/activity', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    if (response.ok) {
+      console.log('Activity data sent successfully');
+    } else {
+      console.error('Failed to send activity data:', response.status);
+    }
+  } catch (error) {
+    console.error('Error sending activity data:', error);
+  }
+}
+
+// Handle extension startup - get current active tab
+chrome.runtime.onStartup.addListener(async () => {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tabs[0]) {
+    await handleTabSwitch(tabs[0]);
+  }
+});
