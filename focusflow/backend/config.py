@@ -36,8 +36,9 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
 
     class Config:
-        env_file = ".env"
+        env_file = (".env", "../.env")
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
 @lru_cache()
