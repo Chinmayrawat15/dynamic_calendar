@@ -63,39 +63,44 @@ Guidelines:
         Returns:
             ChatResponse with AI response and optional suggestions
         """
-        # TODO: Person D - Implement real Keywords AI call
-        # async with httpx.AsyncClient() as client:
-        #     response = await client.post(
-        #         f"{self.base_url}/chat/completions",
-        #         headers=self._get_headers(),
-        #         json={
-        #             "model": "gpt-4o-mini",  # or other model via Keywords AI
-        #             "messages": [
-        #                 {"role": "system", "content": self._build_system_prompt(context)},
-        #                 {"role": "user", "content": message}
-        #             ],
-        #             "temperature": temperature
-        #         },
-        #         timeout=30.0
-        #     )
-        #     response.raise_for_status()
-        #     data = response.json()
-        #     ai_message = data["choices"][0]["message"]["content"]
-        #
-        #     # Parse suggestions if the AI included them
-        #     suggestions = self._extract_suggestions(ai_message)
-        #
-        #     return ChatResponse(
-        #         response=ai_message,
-        #         suggestions=suggestions
-        #     )
+        if not self.api_key:
+            return ChatResponse(
+                response="Keywords AI API key is not configured. Please check your .env file.",
+                suggestions=["Check .env", "Get API Key"]
+            )
 
-        # STUB: Return mock response (actual implementation in routers/chat.py)
-        print(f"🤖 Keywords AI chat (mock): {message[:50]}...")
-        return ChatResponse(
-            response="This is a mock Keywords AI response. Implement real API call in keywords_ai_service.py",
-            suggestions=["Learn more", "Get help", "See examples"]
-        )
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/api/chat/completions",
+                    headers=self._get_headers(),
+                    json={
+                        "model": "gpt-4o-mini",
+                        "messages": [
+                            {"role": "system", "content": self._build_system_prompt(context)},
+                            {"role": "user", "content": message}
+                        ],
+                        "temperature": temperature
+                    },
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                data = response.json()
+                ai_message = data["choices"][0]["message"]["content"]
+
+                # Parse suggestions if the AI included them
+                suggestions = self._extract_suggestions(ai_message)
+
+                return ChatResponse(
+                    response=ai_message,
+                    suggestions=suggestions
+                )
+        except Exception as e:
+            print(f"Keywords AI Error: {e}")
+            return ChatResponse(
+                response="I'm having trouble connecting to the cloud right now. Please try again later.",
+                suggestions=["Retry"]
+            )
 
     async def analyze_productivity(
         self,
@@ -114,20 +119,16 @@ Guidelines:
         Returns:
             Analysis text
         """
-        # TODO: Person D - Create analysis prompt
-        # prompt = f"""Analyze these productivity metrics and provide brief insights:
-        # - Focus Score: {stats['today_focus_score']}/100
-        # - Hours Tracked: {stats['hours_tracked_today']}
-        # - Prediction Accuracy: {stats['prediction_accuracy_percent']}%
-        # - Total Sessions: {stats['total_sessions']}
-        #
-        # Provide 2-3 actionable insights."""
-        #
-        # response = await self.chat(prompt, context)
-        # return response.response
-
-        # STUB
-        return "Your productivity looks good today. Consider taking a break soon to maintain focus."
+        prompt = f"""Analyze these productivity metrics and provide brief insights:
+        - Focus Score: {stats.get('today_focus_score', 'N/A')}/100
+        - Hours Tracked: {stats.get('hours_tracked_today', 'N/A')}
+        - Prediction Accuracy: {stats.get('prediction_accuracy_percent', 'N/A')}%
+        - Total Sessions: {stats.get('total_sessions', 'N/A')}
+        
+        Provide 2-3 actionable insights."""
+        
+        response = await self.chat(prompt, context)
+        return response.response
 
     def _extract_suggestions(self, response: str) -> Optional[list[str]]:
         """
