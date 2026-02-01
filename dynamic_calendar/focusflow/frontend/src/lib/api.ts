@@ -14,6 +14,8 @@ import type {
   SettingsResponse,
   SettingsUpdateRequest,
   SettingsUpdateResponse,
+  GoogleAuthStatusResponse,
+  GoogleAuthInitResponse,
 } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -132,6 +134,29 @@ export async function createCalendarEvent(
   return apiFetch<CreateEventResponse>("/api/calendar", {
     method: "POST",
     body: JSON.stringify(request),
+  });
+}
+
+/**
+ * Check Google Calendar authentication status.
+ */
+export async function getGoogleAuthStatus(): Promise<GoogleAuthStatusResponse> {
+  return apiFetch<GoogleAuthStatusResponse>("/api/calendar/auth/status");
+}
+
+/**
+ * Initiate Google Calendar OAuth flow.
+ */
+export async function initiateGoogleAuth(): Promise<GoogleAuthInitResponse> {
+  return apiFetch<GoogleAuthInitResponse>("/api/calendar/auth");
+}
+
+/**
+ * Logout and disconnect Google account.
+ */
+export async function logout(): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>("/api/calendar/logout", {
+    method: "POST",
   });
 }
 
