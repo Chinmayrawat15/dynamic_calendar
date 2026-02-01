@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import type { ChatMessage } from "@/lib/types";
+import type { ChatMessage, HistoryMessage } from "@/lib/types";
+import { sendChatMessage } from "@/lib/api";
 
 interface ChatBotProps {
   currentTask?: string;
@@ -10,7 +11,7 @@ interface ChatBotProps {
 
 /**
  * ChatBot component for AI interactions.
- * TODO: Person C - Wire up real API calls and add streaming
+ * Connected to Keywords AI via the backend API.
  */
 export default function ChatBot({ currentTask, conservativity }: ChatBotProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -48,44 +49,37 @@ export default function ChatBot({ currentTask, conservativity }: ChatBotProps) {
     setInput("");
     setIsLoading(true);
 
-    // TODO: Person C - Replace with real API call
-    // const response = await sendChatMessage(text, { currentTask, conservativity });
+    try {
+      // Convert messages to history format (exclude welcome message)
+      const history: HistoryMessage[] = messages
+        .filter((m) => m.id !== "welcome")
+        .map((m) => ({ role: m.role, content: m.content }));
 
-    // MOCK: Simulate API response
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Call the real API with history
+      const response = await sendChatMessage(text, { currentTask, conservativity }, history);
 
-    const mockResponses: Record<string, { content: string; suggestions: string[] }> = {
-      "How's my focus today?": {
-        content:
-          "Your focus score today is 73/100 - that's good! You've had 12 tab switches in the last hour, which is below average. Keep up the good work!",
-        suggestions: ["What's distracting me?", "Tips to improve", "Show detailed stats"],
-      },
-      "Predict task duration": {
-        content: `Based on your history with similar tasks, I'd estimate ${Math.round(45 + 20 * conservativity)} minutes. This accounts for your conservativity setting of ${(conservativity * 100).toFixed(0)}%.`,
-        suggestions: ["Add to calendar", "What affects this?", "Show breakdown"],
-      },
-      "What should I work on?": {
-        content:
-          "Based on your calendar and productivity patterns, I suggest tackling your most complex task now while your focus is high. You have 'Feature Development' scheduled for 2pm.",
-        suggestions: ["Start tracking it", "Show my schedule", "Set a reminder"],
-      },
-    };
+      const assistantMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: response.response,
+        timestamp: new Date(),
+        suggestions: response.suggestions || ["How's my focus?", "Predict duration", "Show stats"],
+      };
 
-    const mockResponse = mockResponses[text] || {
-      content: `I understand you're asking about "${text}". Let me help with that. ${currentTask ? `You're currently working on: ${currentTask}.` : "You haven't started tracking a task yet."}`,
-      suggestions: ["Tell me more", "Show stats", "Get predictions"],
-    };
-
-    const assistantMessage: ChatMessage = {
-      id: (Date.now() + 1).toString(),
-      role: "assistant",
-      content: mockResponse.content,
-      timestamp: new Date(),
-      suggestions: mockResponse.suggestions,
-    };
-
-    setMessages((prev) => [...prev, assistantMessage]);
-    setIsLoading(false);
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error("Chat error:", error);
+      const errorMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "Sorry, I'm having trouble connecting to the server. Please make sure the backend is running on port 8000.",
+        timestamp: new Date(),
+        suggestions: ["Try again", "Check connection"],
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

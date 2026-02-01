@@ -18,50 +18,52 @@ async def get_stats(db: DBSession = Depends(get_db)):
     Get dashboard statistics.
 
     Returns aggregated stats for the dashboard display.
-
-    TODO: Person B - Replace mock with real database queries
+    Calculates real stats from the database.
     """
-    # TODO: Person B - Calculate real stats from database
-    #
-    # today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    #
-    # # Today's focus score (average of all sessions today)
-    # today_sessions = db.query(Session).filter(
-    #     Session.start_time >= today_start
-    # ).all()
-    # today_focus_score = sum(s.focus_score for s in today_sessions) / len(today_sessions) if today_sessions else 0
-    #
-    # # Hours tracked today
-    # today_activities = db.query(Activity).filter(
-    #     Activity.created_at >= today_start
-    # ).all()
-    # hours_tracked = sum(a.duration_ms for a in today_activities) / (1000 * 60 * 60)
-    #
-    # # Prediction accuracy
-    # completed_predictions = db.query(Prediction).filter(
-    #     Prediction.actual_minutes.isnot(None)
-    # ).all()
-    # if completed_predictions:
-    #     errors = [abs(p.predicted_minutes - p.actual_minutes) / p.actual_minutes
-    #               for p in completed_predictions]
-    #     accuracy = (1 - sum(errors) / len(errors)) * 100
-    # else:
-    #     accuracy = 0
-    #
-    # # Total sessions
-    # total_sessions = db.query(Session).count()
-    #
-    # return StatsResponse(
-    #     today_focus_score=today_focus_score,
-    #     hours_tracked_today=hours_tracked,
-    #     prediction_accuracy_percent=accuracy,
-    #     total_sessions=total_sessions
-    # )
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # MOCK: Return realistic mock data
+    # Today's focus score (average of all sessions today)
+    today_sessions = db.query(Session).filter(
+        Session.start_time >= today_start
+    ).all()
+
+    if today_sessions:
+        valid_scores = [s.focus_score for s in today_sessions if s.focus_score is not None]
+        today_focus_score = sum(valid_scores) / len(valid_scores) if valid_scores else 0.0
+    else:
+        today_focus_score = 0.0
+
+    # Hours tracked today
+    today_activities = db.query(Activity).filter(
+        Activity.created_at >= today_start
+    ).all()
+
+    total_ms = sum(a.duration_ms for a in today_activities if a.duration_ms is not None)
+    hours_tracked = total_ms / (1000 * 60 * 60)
+
+    # Prediction accuracy (MAPE-based)
+    completed_predictions = db.query(Prediction).filter(
+        Prediction.actual_minutes.isnot(None)
+    ).all()
+
+    if completed_predictions:
+        errors = []
+        for p in completed_predictions:
+            if p.actual_minutes and p.actual_minutes > 0:
+                error = abs(p.predicted_minutes - p.actual_minutes) / p.actual_minutes
+                errors.append(error)
+        accuracy = (1 - sum(errors) / len(errors)) * 100 if errors else 0.0
+        accuracy = max(0.0, min(100.0, accuracy))  # Clamp to 0-100
+    else:
+        # If no completed predictions, show a reasonable default
+        accuracy = 0.0
+
+    # Total sessions
+    total_sessions = db.query(Session).count()
+
     return StatsResponse(
-        today_focus_score=73.5,
-        hours_tracked_today=4.5,
-        prediction_accuracy_percent=82.3,
-        total_sessions=47
+        today_focus_score=round(today_focus_score, 1),
+        hours_tracked_today=round(hours_tracked, 2),
+        prediction_accuracy_percent=round(accuracy, 1),
+        total_sessions=total_sessions
     )
