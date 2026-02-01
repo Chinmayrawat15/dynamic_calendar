@@ -83,7 +83,7 @@ export default function ChatBot({ currentTask, conservativity }: ChatBotProps) {
   };
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col h-full min-h-0">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
         {messages.map((message, index) => (
