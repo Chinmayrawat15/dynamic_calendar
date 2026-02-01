@@ -6,6 +6,7 @@
 import type {
   ChatRequest,
   ChatResponse,
+  HistoryMessage,
   PredictionResponse,
   StatsResponse,
   CalendarEventsResponse,
@@ -58,7 +59,8 @@ async function apiFetch<T>(
  */
 export async function sendChatMessage(
   message: string,
-  context: { currentTask?: string; conservativity: number }
+  context: { currentTask?: string; conservativity: number },
+  history?: HistoryMessage[]
 ): Promise<ChatResponse> {
   const request: ChatRequest = {
     message,
@@ -66,6 +68,7 @@ export async function sendChatMessage(
       current_task: context.currentTask,
       conservativity: context.conservativity,
     },
+    history: history || [],
   };
 
   return apiFetch<ChatResponse>("/api/chat", {
