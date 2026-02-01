@@ -11,6 +11,8 @@ ENV/
 dist/
 build/
 
+#OAuth/tokens
+token.json
 # Node
 node_modules/
 .next/

@@ -477,24 +477,39 @@ function processSiteTime(siteTime) {
 
 async function sendTaskToAPI(task, focusScore, siteTimeProcessed) {
   try {
-    let primaryDomain = 'unknown';
-    let maxTime = 0;
+    // Build activities array from site time data
+    const activities = [];
+    const now = Date.now();
 
     for (const [site, time] of Object.entries(task.siteTime)) {
-      if (time > maxTime) {
-        maxTime = time;
-        primaryDomain = site;
-      }
+      activities.push({
+        url: `https://${site}/`,
+        domain: site,
+        title: task.taskName,
+        duration_ms: time,
+        start_time: task.startTimestamp,
+        end_time: now
+      });
     }
 
+    // If no activities, create one with the primary domain
+    if (activities.length === 0) {
+      activities.push({
+        url: 'unknown',
+        domain: 'unknown',
+        title: task.taskName,
+        duration_ms: task.totalActiveTime,
+        start_time: task.startTimestamp,
+        end_time: now
+      });
+    }
+
+    // Format payload to match backend's ActivityRequest schema
     const payload = {
       task_name: task.taskName,
-      domain: primaryDomain,
-      title: task.taskName,
-      duration_ms: task.totalActiveTime,
-      focus_score: focusScore,
+      activities: activities,
       tab_switches: task.tabSwitches,
-      timestamp: task.startTimestamp
+      focus_score: focusScore
     };
 
     const response = await fetch('http://localhost:8000/api/activity', {
