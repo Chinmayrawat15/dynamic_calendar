@@ -4,13 +4,41 @@ from datetime import datetime, date
 
 # --- Activity Schemas ---
 class ActivityLog(BaseModel):
+    event_id: Optional[str] = None
+    user_id: Optional[str] = None
     task_name: Optional[str] = None
+    summary: Optional[str] = None
     domain: str
     title: Optional[str] = None
+    description: Optional[str] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
     duration_ms: int
     focus_score: float
     tab_switches: int
+    distractions_count: Optional[int] = None
+    distractions_total_time_ms: Optional[int] = None
     timestamp: Optional[datetime] = None
+
+    @validator("timestamp", pre=True)
+    def parse_timestamp(cls, value):
+        if value is None:
+            return value
+        if isinstance(value, (int, float)):
+            if value > 1_000_000_000_000:
+                return datetime.fromtimestamp(value / 1000)
+            return datetime.fromtimestamp(value)
+        return value
+
+    @validator("start_time", "end_time", pre=True)
+    def parse_event_times(cls, value):
+        if value is None:
+            return value
+        if isinstance(value, (int, float)):
+            if value > 1_000_000_000_000:
+                return datetime.fromtimestamp(value / 1000)
+            return datetime.fromtimestamp(value)
+        return value
 
 class ActivityResponse(BaseModel):
     status: str
@@ -78,4 +106,3 @@ class WeekPlanResponse(BaseModel):
     events: List[WeekPlanEvent]
     generated_by: str
     summary: str
-

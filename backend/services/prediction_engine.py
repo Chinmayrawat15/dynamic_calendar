@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from backend.database import Task, Settings
+from backend.database import Activity, Settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,15 +29,15 @@ def get_prediction(db: Session, category: str, conservativity_override: float = 
     used_task_name = False
     
     if task_name:
-        tasks = db.query(Task).filter(Task.name == task_name).all()
-        durations = [t.total_duration_ms for t in tasks if t.total_duration_ms > 0]
+        activities = db.query(Activity).filter(Activity.task_name == task_name).all()
+        durations = [a.duration_ms for a in activities if a.duration_ms and a.duration_ms > 0]
         if durations:
             used_task_name = True
 
     if not durations:
         # Fallback to category
-        tasks = db.query(Task).filter(Task.category == category).all()
-        durations = [t.total_duration_ms for t in tasks if t.total_duration_ms > 0]
+        activities = db.query(Activity).filter(Activity.category == category).all()
+        durations = [a.duration_ms for a in activities if a.duration_ms and a.duration_ms > 0]
 
     count = len(durations)
     

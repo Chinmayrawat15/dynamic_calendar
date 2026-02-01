@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
-from backend.database import get_db, Activity, Task, CATEGORIES
+from backend.database import get_db, Activity, CATEGORIES
 from backend.schemas import ActivityLog, ActivityResponse
-from datetime import datetime
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -11,6 +11,27 @@ def categorize_domain(domain: str) -> str:
         if any(d in domain for d in domains):
             return category
     return "uncategorized"
+
+def derive_event_times(log: ActivityLog) -> tuple[datetime, datetime]:
+    if log.start_time and log.end_time:
+        return log.start_time, log.end_time
+
+    if log.start_time and log.duration_ms:
+        end_time = log.start_time + timedelta(milliseconds=log.duration_ms)
+        return log.start_time, end_time
+
+    if log.end_time and log.duration_ms:
+        start_time = log.end_time - timedelta(milliseconds=log.duration_ms)
+        return start_time, log.end_time
+
+    if log.timestamp:
+        end_time = log.timestamp
+        start_time = end_time - timedelta(milliseconds=log.duration_ms)
+        return start_time, end_time
+
+    end_time = datetime.utcnow()
+    start_time = end_time - timedelta(milliseconds=log.duration_ms)
+    return start_time, end_time
 
 @router.post("/activity", response_model=ActivityResponse)
 def log_activity(log: ActivityLog, db: Session = Depends(get_db)):
@@ -21,50 +42,33 @@ def log_activity(log: ActivityLog, db: Session = Depends(get_db)):
     # Privacy: raw URLs/titles never leave local backend (they are here, in the backend)
     # We store them in the DB.
     
+    start_time, end_time = derive_event_times(log)
+    title = log.summary or log.title or log.task_name or log.domain
+
+    distractions_count = log.distractions_count if log.distractions_count is not None else log.tab_switches
+    distractions_total_time_ms = log.distractions_total_time_ms or 0
+
     new_activity = Activity(
+        event_id=log.event_id,
+        user_id=log.user_id or "default",
+        event_date=start_time.date(),
         task_name=log.task_name,
         domain=log.domain,
-        title=log.title,
+        title=title,
+        description=log.description,
+        start_time=start_time,
+        end_time=end_time,
         duration_ms=log.duration_ms,
         focus_score=log.focus_score,
         tab_switches=log.tab_switches,
+        distractions_count=distractions_count,
+        distractions_total_time_ms=distractions_total_time_ms,
+        source="extension",
+        status="recorded",
         category=category,
         created_at=log.timestamp or datetime.utcnow()
     )
     db.add(new_activity)
-    
-    # 3. Update tasks aggregate
-    # We identify a task by 'task_name'. If not present, use domain.
-    task_identifier = log.task_name if log.task_name else log.domain
-    
-    task = db.query(Task).filter(Task.name == task_identifier).first()
-    
-    if task:
-        # Update existing task
-        prev_duration = task.total_duration_ms
-        task.total_duration_ms += log.duration_ms
-        
-        # Update weighted average focus score
-        if task.total_duration_ms > 0:
-            task.avg_focus_score = (
-                (task.avg_focus_score * prev_duration) + 
-                (log.focus_score * log.duration_ms)
-            ) / task.total_duration_ms
-            
-        task.updated_at = datetime.utcnow()
-        
-    else:
-        # Create new task
-        task = Task(
-            name=task_identifier,
-            category=category,
-            total_duration_ms=log.duration_ms,
-            session_count=1, # First session
-            avg_focus_score=log.focus_score,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
-        )
-        db.add(task)
     
     db.commit()
     

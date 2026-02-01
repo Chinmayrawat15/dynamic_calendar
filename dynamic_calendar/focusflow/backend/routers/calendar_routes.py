@@ -2,15 +2,121 @@
 Calendar Router - Handles Google Calendar integration.
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session as DBSession
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from fastapi.responses import RedirectResponse, HTMLResponse
+from typing import Optional, Tuple
 
 from models import CalendarEventsResponse, CalendarEvent, CreateEventRequest, CreateEventResponse
-from database import get_db
+from database import get_db, CalendarEvent as CalendarEventDB
 from services.calendar_service import CalendarService
 
 router = APIRouter()
+
+
+def _parse_event_datetime(value: Optional[str]) -> Tuple[Optional[datetime], bool]:
+    if not value:
+        return None, False
+    all_day = "T" not in value
+    try:
+        if value.endswith("Z"):
+            value = value[:-1] + "+00:00"
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        return None, all_day
+    if dt.tzinfo:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt, all_day
+
+
+def _format_event_datetime(value: Optional[datetime], all_day: bool) -> str:
+    if not value:
+        return ""
+    if all_day:
+        return value.date().isoformat()
+    return value.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _upsert_google_events(
+    db: DBSession,
+    items: list[dict],
+    calendar_id: str = "primary",
+    user_id: str = "default"
+) -> None:
+    for item in items:
+        event_id = item.get("id")
+        if not event_id:
+            continue
+        status = item.get("status") or "confirmed"
+        existing = db.query(CalendarEventDB).filter(
+            CalendarEventDB.event_id == event_id,
+            CalendarEventDB.calendar_id == calendar_id,
+            CalendarEventDB.user_id == user_id
+        ).one_or_none()
+
+        if status == "cancelled":
+            if existing:
+                db.delete(existing)
+            continue
+
+        start_value = (item.get("start") or {}).get("dateTime") or (item.get("start") or {}).get("date")
+        end_value = (item.get("end") or {}).get("dateTime") or (item.get("end") or {}).get("date")
+        start_dt, start_all_day = _parse_event_datetime(start_value)
+        end_dt, end_all_day = _parse_event_datetime(end_value)
+        all_day = start_all_day or end_all_day
+
+        if not start_dt or not end_dt:
+            continue
+
+        if not existing:
+            existing = CalendarEventDB(
+                event_id=event_id,
+                calendar_id=calendar_id,
+                user_id=user_id
+            )
+
+        existing.title = item.get("summary", "Untitled")
+        existing.description = item.get("description")
+        existing.location = item.get("location")
+        existing.status = status
+        existing.start_time = start_dt
+        existing.end_time = end_dt
+        existing.all_day = all_day
+        existing.event_date = start_dt.date()
+        existing.time_zone = (item.get("start") or {}).get("timeZone") or (item.get("end") or {}).get("timeZone")
+        existing.etag = item.get("etag")
+        existing.html_link = item.get("htmlLink")
+        existing.updated_at, _ = _parse_event_datetime(item.get("updated"))
+        existing.source = "google"
+
+        db.add(existing)
+
+    db.commit()
+
+
+def _fetch_cached_events(db: DBSession, start: str, end: str) -> list[CalendarEvent]:
+    try:
+        start_dt = datetime.fromisoformat(start)
+        end_dt = datetime.fromisoformat(end) + timedelta(days=1)
+    except ValueError:
+        return []
+
+    records = db.query(CalendarEventDB).filter(
+        CalendarEventDB.start_time < end_dt,
+        CalendarEventDB.end_time >= start_dt
+    ).order_by(CalendarEventDB.start_time.asc()).all()
+
+    return [
+        CalendarEvent(
+            id=record.event_id,
+            title=record.title or "Untitled",
+            start=_format_event_datetime(record.start_time, record.all_day),
+            end=_format_event_datetime(record.end_time, record.all_day),
+            predicted_duration=None
+        )
+        for record in records
+    ]
 
 
 @router.get("/calendar", response_model=CalendarEventsResponse)
@@ -23,57 +129,15 @@ async def get_calendar_events(
     Get calendar events for a date range.
 
     Returns events with predicted durations when available.
-
-    TODO: Person D - Replace mock with real Google Calendar API
     """
-    # STUB: Log the request
-    print(f"📅 Calendar request: {start} to {end}")
+    service = CalendarService()
 
-    # TODO: Person D - Use real calendar service
-    # service = CalendarService()
-    # events = await service.get_events(start, end)
-    # return CalendarEventsResponse(events=events)
+    if service.is_authenticated():
+        items = await service.get_events_raw(start, end)
+        _upsert_google_events(db, items)
 
-    # MOCK: Return sample calendar events
-    mock_events = [
-        CalendarEvent(
-            id="evt_1",
-            title="Team Standup",
-            start="2026-01-31T09:00:00Z",
-            end="2026-01-31T09:30:00Z",
-            predicted_duration=25
-        ),
-        CalendarEvent(
-            id="evt_2",
-            title="Code Review Session",
-            start="2026-01-31T10:00:00Z",
-            end="2026-01-31T11:00:00Z",
-            predicted_duration=55
-        ),
-        CalendarEvent(
-            id="evt_3",
-            title="Feature Development",
-            start="2026-01-31T14:00:00Z",
-            end="2026-01-31T16:00:00Z",
-            predicted_duration=None  # No prediction available
-        ),
-        CalendarEvent(
-            id="evt_4",
-            title="1:1 with Manager",
-            start="2026-02-01T11:00:00Z",
-            end="2026-02-01T11:30:00Z",
-            predicted_duration=30
-        ),
-        CalendarEvent(
-            id="evt_5",
-            title="Sprint Planning",
-            start="2026-02-03T13:00:00Z",
-            end="2026-02-03T15:00:00Z",
-            predicted_duration=110
-        ),
-    ]
-
-    return CalendarEventsResponse(events=mock_events)
+    cached_events = _fetch_cached_events(db, start, end)
+    return CalendarEventsResponse(events=cached_events)
 
 
 @router.post("/calendar", response_model=CreateEventResponse)
@@ -83,31 +147,24 @@ async def create_calendar_event(
 ):
     """
     Create a new calendar event.
-
-    TODO: Person D - Replace mock with real Google Calendar API
     """
-    # STUB: Log the request
-    print(f"📅 Create event: {request.title}")
-    print(f"   Start: {request.start}")
-    print(f"   End: {request.end}")
+    service = CalendarService()
+    if not service.is_authenticated():
+        raise HTTPException(status_code=401, detail="Calendar not authenticated")
 
-    # TODO: Person D - Use real calendar service
-    # service = CalendarService()
-    # event = await service.create_event(
-    #     title=request.title,
-    #     start=request.start,
-    #     end=request.end,
-    #     description=request.description
-    # )
-    # return CreateEventResponse(event_id=event.id, url=event.url)
+    created = await service.create_event(
+        title=request.title,
+        start=request.start,
+        end=request.end,
+        time_zone=request.time_zone,
+        description=request.description
+    )
 
-    # MOCK: Return fake event creation response
-    import uuid
-    event_id = f"evt_{uuid.uuid4().hex[:8]}"
+    _upsert_google_events(db, [created])
 
     return CreateEventResponse(
-        event_id=event_id,
-        url=f"https://calendar.google.com/calendar/event?eid={event_id}"
+        event_id=created.get("id", ""),
+        url=created.get("htmlLink", "")
     )
 
 
@@ -115,25 +172,44 @@ async def create_calendar_event(
 async def calendar_auth():
     """
     Initiate Google Calendar OAuth flow.
-
-    TODO: Person D - Implement OAuth redirect
     """
-    # MOCK: Return instructions
-    return {
-        "status": "not_implemented",
-        "message": "OAuth flow not yet implemented. See docs/GOOGLE_CALENDAR_SETUP.md"
-    }
+    service = CalendarService()
+    try:
+        auth_url = service.get_auth_url()
+        return RedirectResponse(url=auth_url)
+    except Exception as e:
+        return {"error": str(e)}
 
 
-@router.get("/calendar/callback")
+@router.get("/calendar/status")
+async def get_calendar_status():
+    """Check if calendar is authenticated."""
+    service = CalendarService()
+    return {"authenticated": service.is_authenticated()}
+
+
+@router.get("/calendar/callback", response_class=HTMLResponse)
 async def calendar_callback(code: str = Query(...)):
     """
     Handle Google Calendar OAuth callback.
-
-    TODO: Person D - Implement OAuth token exchange
     """
-    # MOCK: Return instructions
-    return {
-        "status": "not_implemented",
-        "message": "OAuth callback not yet implemented."
-    }
+    service = CalendarService()
+    success = service.handle_callback(code)
+
+    if success:
+        return """
+        <html>
+            <body style="font-family: system-ui; text-align: center; padding-top: 50px;">
+                <h1 style="color: #10b981;">Authentication Successful!</h1>
+                <p>You can now return to the app.</p>
+            </body>
+        </html>
+        """
+    return """
+    <html>
+        <body style="font-family: system-ui; text-align: center; padding-top: 50px;">
+            <h1 style="color: #ef4444;">Authentication Failed</h1>
+            <p>Please check the backend logs for details.</p>
+        </body>
+    </html>
+    """

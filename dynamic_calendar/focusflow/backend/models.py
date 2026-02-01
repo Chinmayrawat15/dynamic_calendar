@@ -105,6 +105,7 @@ class CreateEventRequest(BaseModel):
     title: str
     start: str  # ISO format
     end: str    # ISO format
+    time_zone: Optional[str] = None  # IANA timezone, e.g. "America/New_York"
     description: Optional[str] = None
 
 

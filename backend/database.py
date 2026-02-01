@@ -1,8 +1,7 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, JSON, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, JSON, Date, DateTime, Text, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
-import json
 import os
 
 DATABASE_URL = "sqlite:///./focusflow.db"
@@ -14,28 +13,31 @@ Base = declarative_base()
 
 class Activity(Base):
     __tablename__ = "activities"
+    __table_args__ = (
+        UniqueConstraint("user_id", "event_id", "event_date", name="uq_activity_user_event_date"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(String, index=True, nullable=True)
+    user_id = Column(String, index=True, default="default")
+    event_date = Column(Date, index=True)
     task_name = Column(String, nullable=True)
     domain = Column(String, index=True)
     title = Column(String, nullable=True) # Privacy: handled in logic, but schema supports it
+    description = Column(Text, nullable=True)
+    start_time = Column(DateTime, index=True)
+    end_time = Column(DateTime, index=True)
     duration_ms = Column(Integer)
     focus_score = Column(Float)
     tab_switches = Column(Integer)
+    distractions_count = Column(Integer, default=0)
+    distractions_total_time_ms = Column(Integer, default=0)
+    source = Column(String, default="extension")
+    status = Column(String, default="recorded")
+    all_day = Column(Boolean, default=False)
+    time_zone = Column(String, nullable=True)
     category = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
-
-class Task(Base):
-    __tablename__ = "tasks"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    category = Column(String)
-    total_duration_ms = Column(Integer, default=0)
-    session_count = Column(Integer, default=0)
-    avg_focus_score = Column(Float, default=0.0)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class Prediction(Base):
     __tablename__ = "predictions"

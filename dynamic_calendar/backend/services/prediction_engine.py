@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from database import Task, Settings
+from database import Activity, Settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,10 +24,9 @@ def get_prediction(db: Session, category: str, conservativity_override: float = 
         settings = db.query(Settings).filter(Settings.id == 1).first()
         conservativity = settings.conservativity if settings else 0.5
 
-    # Fetch historical data for the category
-    # We use 'tasks' table which has 'total_duration_ms'
-    tasks = db.query(Task).filter(Task.category == category).all()
-    durations = [t.total_duration_ms for t in tasks if t.total_duration_ms > 0]
+    # Fetch historical data for the category from activity rows
+    activities = db.query(Activity).filter(Activity.category == category).all()
+    durations = [a.duration_ms for a in activities if a.duration_ms and a.duration_ms > 0]
 
     count = len(durations)
     

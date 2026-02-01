@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from backend.database import get_db, Activity, Task, Prediction
+from backend.database import get_db, Activity, Prediction
 from backend.schemas import StatsResponse
 from datetime import datetime, timedelta
 
@@ -14,7 +14,8 @@ def get_stats(db: Session = Depends(get_db)):
     
     # 1. Today's stats from activities
     # We aggregate all activities created today
-    todays_activities = db.query(Activity).filter(Activity.created_at >= start_of_day).all()
+    activity_start = func.coalesce(Activity.start_time, Activity.created_at)
+    todays_activities = db.query(Activity).filter(activity_start >= start_of_day).all()
     
     total_duration_ms = sum(a.duration_ms for a in todays_activities)
     hours_tracked_today = total_duration_ms / (1000 * 60 * 60)
@@ -35,8 +36,8 @@ def get_stats(db: Session = Depends(get_db)):
         prediction_accuracy_percent = 0.0
         
     # 3. Total sessions
-    # Using 'tasks' table session_count
-    total_sessions = db.query(func.sum(Task.session_count)).scalar() or 0
+    # Using activity rows as session count
+    total_sessions = db.query(func.count(Activity.id)).scalar() or 0
     
     return {
         "today_focus_score": round(today_focus_score, 2),

@@ -4,7 +4,7 @@ Uses SQLite with SQLAlchemy for persistence.
 """
 
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, String, Float, Date, DateTime, Text, Boolean, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -80,6 +80,33 @@ class Setting(Base):
     key = Column(String, primary_key=True)
     value = Column(Text)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CalendarEvent(Base):
+    """Cached calendar events for LLM queries and offline access."""
+    __tablename__ = "calendar_events"
+    __table_args__ = (
+        UniqueConstraint("user_id", "event_id", "event_date", name="uq_calendar_event"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(String, index=True, nullable=False)
+    calendar_id = Column(String, index=True, default="primary")
+    user_id = Column(String, index=True, default="default")
+    event_date = Column(Date, index=True)
+    title = Column(String)
+    description = Column(Text)
+    location = Column(Text)
+    status = Column(String, default="confirmed")
+    start_time = Column(DateTime, index=True)
+    end_time = Column(DateTime, index=True)
+    all_day = Column(Boolean, default=False)
+    time_zone = Column(String)
+    etag = Column(String)
+    html_link = Column(String)
+    updated_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    source = Column(String, default="google")
 
 
 # ============================================================

@@ -1,8 +1,7 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, JSON, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, JSON, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
-import json
 import os
 
 DATABASE_URL = "sqlite:///./focusflow.db"
@@ -24,18 +23,6 @@ class Activity(Base):
     tab_switches = Column(Integer)
     category = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
-
-class Task(Base):
-    __tablename__ = "tasks"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    category = Column(String)
-    total_duration_ms = Column(Integer, default=0)
-    session_count = Column(Integer, default=0)
-    avg_focus_score = Column(Float, default=0.0)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class Prediction(Base):
     __tablename__ = "predictions"
