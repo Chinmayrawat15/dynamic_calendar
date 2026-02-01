@@ -13,54 +13,47 @@
     <!-- Task Management -->
     <div class="task-section">
       <h2>Current Task</h2>
+      <div id="currentTaskDisplay" class="current-task"></div>
       <div class="task-controls">
-        <input 
-          type="text" 
-          id="taskInput" 
+        <input
+          type="text"
+          id="taskInput"
           placeholder="Enter task name..."
           maxlength="100"
         >
         <div class="button-group">
           <button id="startTaskBtn" class="btn btn-start">Start Task</button>
+          <button id="pauseTaskBtn" class="btn btn-pause" disabled>Pause</button>
           <button id="endTaskBtn" class="btn btn-end" disabled>End Task</button>
         </div>
       </div>
-      <div id="currentTaskDisplay" class="current-task"></div>
+    </div>
+
+    <!-- Paused Tasks -->
+    <div class="paused-section">
+      <h2>Paused Tasks</h2>
+      <div id="pausedTasksList" class="paused-list">
+        <p class="empty-state">No paused tasks</p>
+      </div>
     </div>
 
     <!-- Statistics -->
     <div class="stats-section">
-      <h2>Statistics</h2>
-      
+      <h2>Current Task Stats</h2>
+
       <div class="stat-card">
-        <div class="stat-label">Time on Current Task</div>
+        <div class="stat-label">Active Time</div>
         <div class="stat-value" id="taskTime">0m 0s</div>
       </div>
-      
+
       <div class="stat-card">
-        <div class="stat-label">Tab Switches (Current Task)</div>
+        <div class="stat-label">Tab Switches</div>
         <div class="stat-value" id="taskSwitches">0</div>
       </div>
-      
+
       <div class="stat-card">
-        <div class="stat-label">Total Tab Switches</div>
-        <div class="stat-value" id="totalSwitches">0</div>
-      </div>
-    </div>
-
-    <!-- Site Time -->
-    <div class="site-time-section">
-      <h2>Time on Tracked Sites</h2>
-      <div id="siteTimeList" class="site-list">
-        <p class="empty-state">No tracked site activity yet</p>
-      </div>
-    </div>
-
-    <!-- Recent Activity -->
-    <div class="recent-section">
-      <h2>Recent Tab Switches</h2>
-      <div id="recentSwitches" class="recent-list">
-        <p class="empty-state">No recent activity</p>
+        <div class="stat-label">Total Switches (All Time)</div>
+        <div class="stat-value" id="totalSwitches">-</div>
       </div>
     </div>
 
