@@ -1,6 +1,7 @@
 import httpx
 import os
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -38,3 +39,23 @@ async def generate_response(prompt: str, variables: dict = None) -> str:
     except Exception as e:
         logger.error(f"Error calling Keywords AI: {e}")
         return "Error generating response from AI."
+
+async def generate_structured_response(prompt: str, output_schema_description: str) -> dict:
+    """
+    Call Keywords AI service and expect a JSON response.
+    """
+    structured_prompt = (
+        f"{prompt}\n\nRespond ONLY with valid JSON matching this schema: "
+        f"{output_schema_description}. No explanation, no markdown fences, just the raw JSON object."
+    )
+    
+    response_text = await generate_response(structured_prompt)
+    
+    # Remove any potential markdown fences if the LLM ignores instructions
+    response_text = response_text.replace("```json", "").replace("```", "").strip()
+    
+    try:
+        return json.loads(response_text)
+    except Exception as e:
+        logger.warning(f"Failed to parse JSON response from AI: {e}. Response was: {response_text}")
+        return {}
