@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import StatsCards from "@/components/StatsCards";
-import ChatBot from "@/components/ChatBot";
+import ResizableChatPanel from "@/components/ResizableChatPanel";
 import Calendar from "@/components/Calendar";
 import ConservativitySlider from "@/components/ConservativitySlider";
 import type { StatsResponse } from "@/lib/types";
@@ -41,55 +41,55 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen">
-      {/* Sidebar */}
-      <Sidebar currentTask={currentTask} onTaskChange={setCurrentTask} />
+      {/* Left Section: Sidebar + Main Content */}
+      <div className="flex flex-1 min-w-0">
+        {/* Sidebar */}
+        <Sidebar currentTask={currentTask} onTaskChange={setCurrentTask} />
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto p-6">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-500">
-              Track your productivity and get AI-powered predictions
-            </p>
-          </div>
-
-          {/* Stats Cards */}
-          <div className="mb-6">
-            <StatsCards stats={stats} />
-          </div>
-
-          {/* Conservativity Slider */}
-          <div className="mb-6">
-            <div className="card">
-              <h2 className="text-lg font-semibold mb-4">Prediction Settings</h2>
-              <ConservativitySlider
-                value={conservativity}
-                onChange={setConservativity}
-              />
+        {/* Main Content */}
+        <main className="flex-1 overflow-auto p-6 min-w-0">
+          <div className="max-w-5xl mx-auto">
+            {/* Header */}
+            <div className="mb-6">
+              <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+              <p className="text-gray-500">
+                Track your productivity and get AI-powered predictions
+              </p>
             </div>
-          </div>
 
-          {/* Two Column Layout: Calendar and Chat */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Calendar */}
+            {/* Stats Cards */}
+            <div className="mb-6">
+              <StatsCards stats={stats} />
+            </div>
+
+            {/* Conservativity Slider */}
+            <div className="mb-6">
+              <div className="card">
+                <h2 className="text-lg font-semibold mb-4">Prediction Settings</h2>
+                <ConservativitySlider
+                  value={conservativity}
+                  onChange={setConservativity}
+                />
+              </div>
+            </div>
+
+            {/* Google Calendar Integration */}
             <div className="card">
-              <h2 className="text-lg font-semibold mb-4">Upcoming Events</h2>
+              <h2 className="text-lg font-semibold mb-4">Google Calendar</h2>
               <Calendar />
             </div>
-
-            {/* Chat */}
-            <div className="card flex flex-col" style={{ height: "500px" }}>
-              <h2 className="text-lg font-semibold mb-4">FocusFlow Assistant</h2>
-              <ChatBot
-                currentTask={currentTask}
-                conservativity={conservativity}
-              />
-            </div>
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
+
+      {/* Right Section: Resizable Chat Panel */}
+      <ResizableChatPanel
+        currentTask={currentTask}
+        conservativity={conservativity}
+        minWidth={320}
+        maxWidth={800}
+        defaultWidth={400}
+      />
     </div>
   );
 }
