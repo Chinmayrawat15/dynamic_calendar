@@ -30,8 +30,34 @@ async def chat_with_ai(request: ChatRequest):
     
     response_text = await generate_response(prompt)
     
-    # Extract suggestions if possible (naive implementation)
+    # Generate suggestions
+    suggestions_prompt = (
+        f"Original user message: {sanitized_message}\n\n"
+        f"AI response: {response_text}\n\n"
+        "Based on the above, suggest 1-3 short follow-up actions or questions the user might find useful. "
+        "Return ONLY a numbered list, nothing else. Example:\n1. Ask about X\n2. Try Y\n3. Look into Z"
+    )
+    
+    suggestions_text = await generate_response(suggestions_prompt)
     suggestions = []
+    
+    if suggestions_text and "Error" not in suggestions_text:
+        lines = suggestions_text.split('\n')
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # Remove leading numbers/dots (e.g. "1. " or "2. ")
+            # Find first dot
+            parts = line.split('.', 1)
+            if len(parts) > 1:
+                cleaned = parts[1].strip()
+            else:
+                cleaned = line.strip()
+                
+            if cleaned:
+                suggestions.append(cleaned)
     
     return {
         "response": response_text,
