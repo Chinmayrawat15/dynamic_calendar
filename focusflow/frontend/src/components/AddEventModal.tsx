@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createCalendarEvent } from "@/lib/api";
 
 const formatLocalDate = (date: Date) => {
@@ -33,6 +33,12 @@ export default function AddEventModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (defaultDate) {
+      setDate(formatLocalDate(defaultDate));
+    }
+  }, [defaultDate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -50,7 +56,6 @@ export default function AddEventModal({
         description: description || undefined,
       });
 
-      // Reset form
       setTitle("");
       setDescription("");
       setStartTime("09:00");
@@ -68,23 +73,34 @@ export default function AddEventModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/50"
+        className="overlay"
         onClick={onClose}
       />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">Add Event</h2>
+      <div className="relative bg-white rounded-2xl shadow-soft-xl w-full max-w-md animate-scale-in">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-surface-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center">
+              <svg className="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-surface-900">Add Event</h2>
+              <p className="text-xs text-surface-500">Create a new calendar event</p>
+            </div>
+          </div>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+            className="icon-btn"
           >
             <svg
-              className="w-5 h-5 text-gray-500"
+              className="w-5 h-5"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -99,40 +115,35 @@ export default function AddEventModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {/* Title */}
           <div>
-            <label
-              htmlFor="title"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Event Title *
+            <label htmlFor="title" className="label">
+              Event Title <span className="text-danger-500">*</span>
             </label>
             <input
               type="text"
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Enter event title"
-              className="input w-full"
+              placeholder="What's the event about?"
+              className="input"
               required
+              autoFocus
             />
           </div>
 
           {/* Date */}
           <div>
-            <label
-              htmlFor="date"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Date *
+            <label htmlFor="date" className="label">
+              Date <span className="text-danger-500">*</span>
             </label>
             <input
               type="date"
               id="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="input w-full"
+              className="input"
               required
             />
           </div>
@@ -140,34 +151,28 @@ export default function AddEventModal({
           {/* Time */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label
-                htmlFor="startTime"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Start Time *
+              <label htmlFor="startTime" className="label">
+                Start Time <span className="text-danger-500">*</span>
               </label>
               <input
                 type="time"
                 id="startTime"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="input w-full"
+                className="input"
                 required
               />
             </div>
             <div>
-              <label
-                htmlFor="endTime"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                End Time *
+              <label htmlFor="endTime" className="label">
+                End Time <span className="text-danger-500">*</span>
               </label>
               <input
                 type="time"
                 id="endTime"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
-                className="input w-full"
+                className="input"
                 required
               />
             </div>
@@ -175,25 +180,25 @@ export default function AddEventModal({
 
           {/* Description */}
           <div>
-            <label
-              htmlFor="description"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Description
+            <label htmlFor="description" className="label">
+              Description <span className="text-surface-400 font-normal">(optional)</span>
             </label>
             <textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add a description (optional)"
-              className="input w-full h-24 resize-none"
+              placeholder="Add notes or details..."
+              className="textarea"
               rows={3}
             />
           </div>
 
           {/* Error message */}
           {error && (
-            <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+            <div className="p-3 bg-danger-50 text-danger-700 rounded-xl text-sm border border-danger-200 flex items-start gap-2">
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
               {error}
             </div>
           )}
@@ -237,7 +242,12 @@ export default function AddEventModal({
                   Adding...
                 </span>
               ) : (
-                "Add to Calendar"
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Event
+                </>
               )}
             </button>
           </div>
