@@ -37,9 +37,15 @@ export interface ChatContext {
   conservativity: number;
 }
 
+export interface HistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface ChatRequest {
   message: string;
   context: ChatContext;
+  history?: HistoryMessage[];
 }
 
 export interface ChatResponse {
