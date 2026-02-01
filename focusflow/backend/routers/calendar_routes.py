@@ -46,6 +46,7 @@ async def create_calendar_event(
         title=request.title,
         start=request.start,
         end=request.end,
+        time_zone=request.time_zone,
         description=request.description
     )
     return CreateEventResponse(
