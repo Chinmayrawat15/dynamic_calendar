@@ -107,25 +107,6 @@ export interface CreateEventResponse {
   url: string;
 }
 
-export interface GoogleAuthStatusResponse {
-  authenticated: boolean;
-  email?: string;
-  name?: string;
-  given_name?: string;
-  picture?: string;
-}
-
-export interface UserProfile {
-  email: string;
-  name: string;
-  given_name: string;
-  picture: string;
-}
-
-export interface GoogleAuthInitResponse {
-  auth_url: string;
-}
-
 // ============================================================
 // Settings Types
 // ============================================================
