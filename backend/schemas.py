@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, date
 
 # --- Activity Schemas ---
 class ActivityLog(BaseModel):
@@ -19,7 +19,8 @@ class ActivityResponse(BaseModel):
 # --- Prediction Schemas ---
 class PredictionResponse(BaseModel):
     predicted_duration_ms: int
-    confidence: str # "low", "medium", "high"
+    confidence_percent: int
+    confidence_label: str
     explanation: str
 
 # --- Stats Schemas ---
@@ -54,10 +55,27 @@ class CalendarEvent(BaseModel):
     end_time: datetime
     description: Optional[str] = None
     predicted_duration_ms: Optional[int] = None
+    confidence_percent: Optional[int] = None
+    confidence_label: Optional[str] = None
+    insight: Optional[str] = None
 
 class CalendarEventCreate(BaseModel):
     summary: str
     start_time: datetime
     duration_minutes: int
     description: Optional[str] = None
+
+# --- Week Plan Schemas ---
+class WeekPlanEvent(BaseModel):
+    summary: str
+    date: date
+    predicted_duration_ms: int
+    confidence_percent: int
+    confidence_label: str
+    insight: str
+
+class WeekPlanResponse(BaseModel):
+    events: List[WeekPlanEvent]
+    generated_by: str
+    summary: str
 
