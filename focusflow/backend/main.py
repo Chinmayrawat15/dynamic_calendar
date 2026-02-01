@@ -47,6 +47,7 @@ async def startup_event():
     init_db()
     print("✅ FocusFlow API started")
     print(f"📚 Docs available at http://localhost:{settings.backend_port}/docs")
+    print(f"➡️  Click here! http://localhost:8000/api/calendar/auth")
 
 
 @app.get("/")
