@@ -1,131 +1,62 @@
 # FocusFlow
 
-Productivity tracking with AI-powered predictions.
+AI-powered productivity tracking with smart task predictions and Google Calendar integration.
 
-## Overview
+## What is FocusFlow?
 
-FocusFlow is a productivity tracking application that:
-- Tracks web activity via a Chrome extension
-- Analyzes patterns using local Ollama (for privacy) and Keywords AI (for chat)
-- Predicts task durations based on historical data
-- Provides a dashboard with chatbot, calendar, and statistics
+FocusFlow is a productivity application that:
+- Tracks your web activity via a Chrome extension
+- Uses AI (Keywords AI) to power a smart chatbot assistant
+- Predicts how long tasks will take based on your history
+- Integrates with Google Calendar to schedule tasks with AI-predicted durations
 
-## Quick Start
+## Tech Stack
+
+- **Frontend**: Next.js 14, React, TypeScript, Tailwind CSS
+- **Backend**: FastAPI (Python), SQLite, SQLAlchemy
+- **AI**: Keywords AI (GPT-4o-mini with function calling)
+- **Calendar**: Google Calendar API (OAuth2)
+- **Extension**: Chrome Manifest V3
+
+## How to Run
 
 ### Prerequisites
 - Python 3.11+
 - Node.js 18+
-- Ollama with llama3.1:8b
-- Chrome browser
 
-### Setup
+### Step 1: Start the Backend
 
-1. Clone and install:
+Open a terminal and run:
+
 ```bash
-git clone <repo>
-cd focusflow
-cp .env.example .env
-# Fill in your API keys
-```
-
-2. Backend:
-```bash
-cd backend
+cd focusflow/backend
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate   # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
-# API runs at http://localhost:8000
 ```
 
-3. Frontend:
+Keep this terminal open. You will see a link that says **"Click here"** - you'll need this later.
+
+### Step 2: Start the Frontend
+
+Open a **new terminal** and run:
+
 ```bash
-cd frontend
+cd focusflow/frontend
 npm install
 npm run dev
-# UI runs at http://localhost:3000
 ```
 
-4. Extension:
-- Go to chrome://extensions
-- Enable Developer Mode
-- Click "Load unpacked"
-- Select the `extension` folder
-- Pin the FocusFlow extension for easy access
+### Step 3: Access the Application
 
-5. Ollama (for local LLM):
-```bash
-ollama serve
-# In another terminal:
-ollama pull llama3.1:8b
-```
+Go back to your **backend terminal** and click the link that says **"Click here"** to open the application in your browser.
 
-## Architecture
+## Important Note: OAuth Limitation
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Chrome Ext     │────▶│  FastAPI        │────▶│  SQLite DB      │
-│  (Activity)     │     │  Backend        │     │                 │
-└─────────────────┘     └────────┬────────┘     └─────────────────┘
-                                 │
-                    ┌────────────┴────────────┐
-                    ▼                         ▼
-          ┌─────────────────┐       ┌─────────────────┐
-          │  Ollama (Local) │       │  Keywords AI    │
-          │  Pattern Analysis│       │  User Chat      │
-          └─────────────────┘       └─────────────────┘
-                    │                         │
-                    └────────────┬────────────┘
-                                 ▼
-                    ┌─────────────────────────┐
-                    │  Next.js Frontend       │
-                    │  Dashboard + Chat       │
-                    └─────────────────────────┘
-```
+**You will not be able to fully access the site.** The Google OAuth integration will fail for external users because our Google Cloud Console project is currently in **testing mode**. Only our authorized testing emails can authenticate.
 
-## Team Assignments
-
-See [TEAM_TASKS.md](TEAM_TASKS.md) for detailed task assignments.
-
-| Person | Component | Directory |
-|--------|-----------|-----------|
-| A | Chrome Extension | `/extension` |
-| B | Backend + Local LLM | `/backend` |
-| C | Frontend | `/frontend` |
-| D | Integration + APIs | `/docs` + services |
-
-## API Documentation
-
-See [docs/API_CONTRACT.md](docs/API_CONTRACT.md) for complete API documentation.
-
-## Development
-
-### Running Tests
-```bash
-# Backend
-cd backend
-pytest
-
-# Frontend
-cd frontend
-npm test
-```
-
-### Environment Variables
-
-Copy `.env.example` to `.env` and fill in:
-- `KEYWORDS_AI_API_KEY` - Get from Keywords AI dashboard
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` - Google Cloud Console
-- `OLLAMA_HOST` - Usually http://localhost:11434
-
-## Tech Stack
-
-- **Extension**: Chrome Manifest V3, vanilla JS
-- **Backend**: FastAPI, SQLite, Python 3.11+
-- **Local LLM**: Ollama (llama3.1:8b)
-- **Cloud LLM**: Keywords AI (api.keywordsai.co)
-- **Frontend**: Next.js 14 App Router, TypeScript, Tailwind
-- **Calendar**: Google Calendar API
+If you'd like to test the full functionality, please contact us to add your email to the testing whitelist.
 
 ## License
 
