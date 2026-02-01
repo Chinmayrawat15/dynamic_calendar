@@ -9,6 +9,7 @@ from fastapi.responses import RedirectResponse, HTMLResponse
 from models import CalendarEventsResponse, CalendarEvent, CreateEventRequest, CreateEventResponse
 from database import get_db
 from services.calendar_service import CalendarService
+from config import settings
 
 router = APIRouter()
 
@@ -66,6 +67,13 @@ async def calendar_auth():
         return {"error": str(e)}
 
 
+@router.get("/calendar/status")
+async def get_calendar_status():
+    """Check if calendar is authenticated."""
+    service = CalendarService()
+    return {"authenticated": service.is_authenticated()}
+
+
 @router.get("/calendar/callback", response_class=HTMLResponse)
 async def calendar_callback(code: str = Query(...)):
     """
@@ -75,20 +83,33 @@ async def calendar_callback(code: str = Query(...)):
     success = service.handle_callback(code)
     
     if success:
-        return """
+        return f"""
         <html>
-            <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
-                <h1 style="color: green;">Authentication Successful!</h1>
-                <p>FocusFlow is now connected to your Google Calendar.</p>
-                <p>You can close this window and return to the application.</p>
+            <head>
+                <title>FocusFlow Auth Success</title>
+                <style>
+                    body {{ font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f9fafb; }}
+                    .card {{ background: white; padding: 2.5rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); text-align: center; max-width: 400px; width: 90%; }}
+                    h1 {{ color: #10b981; margin: 0 0 1rem 0; font-size: 1.5rem; }}
+                    p {{ color: #4b5563; margin-bottom: 2rem; line-height: 1.5; }}
+                    .btn {{ display: inline-block; background-color: #3b82f6; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: 500; transition: background-color 0.2s; }}
+                    .btn:hover {{ background-color: #2563eb; }}
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h1>Authentication Successful!</h1>
+                    <p>FocusFlow is now connected to your Google Calendar.</p>
+                    <a href="{settings.frontend_url}/" class="btn">Return to App</a>
+                </div>
             </body>
         </html>
         """
     else:
-        return """
+        return f"""
         <html>
-            <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
-                <h1 style="color: red;">Authentication Failed</h1>
+            <body style="font-family: system-ui; text-align: center; padding-top: 50px;">
+                <h1 style="color: #ef4444;">Authentication Failed</h1>
                 <p>Please check the backend logs for details.</p>
             </body>
         </html>
