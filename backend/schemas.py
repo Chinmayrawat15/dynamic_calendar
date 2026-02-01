@@ -79,3 +79,22 @@ class WeekPlanResponse(BaseModel):
     generated_by: str
     summary: str
 
+# --- Schedule Schemas ---
+class ScheduleRequest(BaseModel):
+    user_prompt: str
+    conservatism: float = Field(0.5, ge=0.0, le=1.0)
+
+class ScheduledEvent(BaseModel):
+    summary: str
+    start_time: datetime
+    duration_minutes: int
+    description: Optional[str] = ""
+    location: Optional[str] = ""
+    attendees: Optional[List[str]] = []
+    priority: Optional[str] = "medium"
+    tags: Optional[List[str]] = []
+
+class ScheduleResponse(BaseModel):
+    events: List[ScheduledEvent]
+    frontend_message: str
+
