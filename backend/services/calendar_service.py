@@ -1,4 +1,4 @@
-import os.path
+import os
 import datetime
 import logging
 from google.auth.transport.requests import Request
@@ -9,41 +9,67 @@ from googleapiclient.errors import HttpError
 
 logger = logging.getLogger(__name__)
 
-# If modifying these scopes, delete the file token.json.
+# Define paths relative to the backend directory
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CREDENTIALS_FILE = os.path.join(BASE_DIR, 'credentials.json')
+TOKEN_FILE = os.path.join(BASE_DIR, 'token.json')
 SCOPES = ['https://www.googleapis.com/auth/calendar']
-CREDENTIALS_FILE = 'credentials.json'
-TOKEN_FILE = 'token.json'
+
+def check_calendar_setup():
+    """
+    Checks the status of the Google Calendar integration.
+    Returns a dictionary with status details and instructions.
+    """
+    status = {
+        "credentials_exist": os.path.exists(CREDENTIALS_FILE),
+        "token_exists": os.path.exists(TOKEN_FILE),
+        "api_connected": False,
+        "message": "Unknown status"
+    }
+    
+    if not status["credentials_exist"]:
+        status["message"] = "Missing credentials.json. Please download it from Google Cloud Console and place it in the backend/ directory."
+        return status
+
+    if not status["token_exists"]:
+        status["message"] = "Missing token.json. Please run 'python -m backend.scripts.init_calendar' to authenticate."
+        return status
+
+    # Try to connect
+    service = get_calendar_service()
+    if service:
+        status["api_connected"] = True
+        status["message"] = "Google Calendar API is connected and ready."
+    else:
+        status["message"] = "Failed to connect to Google Calendar API. Check logs for details."
+    
+    return status
 
 def get_calendar_service():
     creds = None
-    # The file token.json stores the user's access and refresh tokens, and is
-    # created automatically when the authorization flow completes for the first
-    # time.
-    if os.path.exists(TOKEN_FILE):
-        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
     
-    # If there are no (valid) credentials available, let the user log in.
+    if os.path.exists(TOKEN_FILE):
+        try:
+            creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+        except Exception as e:
+            logger.error(f"Error loading token.json: {e}")
+
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             try:
+                logger.info("Refreshing expired access token...")
                 creds.refresh(Request())
+                with open(TOKEN_FILE, 'w') as token:
+                    token.write(creds.to_json())
             except Exception as e:
                 logger.error(f"Error refreshing token: {e}")
                 return None
         else:
             if os.path.exists(CREDENTIALS_FILE):
-                try:
-                    flow = InstalledAppFlow.from_client_secrets_file(
-                        CREDENTIALS_FILE, SCOPES)
-                    creds = flow.run_local_server(port=0)
-                    # Save the credentials for the next run
-                    with open(TOKEN_FILE, 'w') as token:
-                        token.write(creds.to_json())
-                except Exception as e:
-                    logger.error(f"Error during OAuth flow: {e}")
-                    return None
+                 logger.warning("Valid token not found. Please run 'python -m backend.scripts.init_calendar' to authenticate.")
+                 return None
             else:
-                logger.warning("credentials.json not found. Calendar integration disabled.")
+                logger.warning(f"credentials.json not found at {CREDENTIALS_FILE}. Calendar integration disabled.")
                 return None
 
     try:
