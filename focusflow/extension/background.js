@@ -1,246 +1,515 @@
 // Background service worker for Activity Tracker
+// All state is stored in chrome.storage to survive service worker restarts
 
-let currentTabId = null;
-let currentUrl = null;
-let sessionStartTime = null;
-let currentTask = null;
-let taskStartTime = null;
+// Storage keys:
+// - activeTaskState: { task: {...}, sessionStartTime: timestamp, currentUrl: string }
+// - pausedTasks: Array of paused tasks
+// - timerWindowId: Window ID for floating timer
 
-// Activity data structure
-let activityData = {
-  tabSwitches: [],
-  siteTime: {},
-  taskSessions: []
-};
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
 
-// Initialize extension
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
   console.log('Activity Tracker installed');
-  initializeStorage();
+  await initializeStorage();
+});
+
+chrome.runtime.onStartup.addListener(async () => {
+  console.log('Activity Tracker started');
+  // Resume tracking on current tab if there's an active task
+  const state = await getActiveState();
+  if (state) {
+    await updateCurrentTab();
+  }
 });
 
 // Initialize storage with default values
 async function initializeStorage() {
-  const data = await chrome.storage.local.get(['trackedSites', 'activityData']);
-  
+  const data = await chrome.storage.local.get(['trackedSites', 'pausedTasks', 'activeTaskState']);
+
   if (!data.trackedSites) {
     await chrome.storage.local.set({
       trackedSites: ['github.com', 'stackoverflow.com', 'youtube.com']
     });
   }
-  
-  if (!data.activityData) {
-    await chrome.storage.local.set({ activityData });
-  } else {
-    activityData = data.activityData;
+
+  if (!data.pausedTasks) {
+    await chrome.storage.local.set({ pausedTasks: [] });
+  }
+
+  // If there's an active task from previous session, resume tracking
+  if (data.activeTaskState) {
+    await updateCurrentTab();
+    console.log('Active task restored:', data.activeTaskState.task.taskName);
   }
 }
 
-// Track tab activation (tab switches)
+// ============================================================================
+// STATE MANAGEMENT
+// ============================================================================
+
+// Get active task state from storage (no side effects)
+async function getActiveState() {
+  const data = await chrome.storage.local.get('activeTaskState');
+  return data.activeTaskState || null;
+}
+
+// Update active task state in storage
+async function setActiveState(taskState) {
+  await chrome.storage.local.set({ activeTaskState: taskState });
+}
+
+// Clear active task state
+async function clearActiveState() {
+  await chrome.storage.local.remove('activeTaskState');
+}
+
+// Update current tab info in active state
+async function updateCurrentTab() {
+  const state = await getActiveState();
+  if (!state) return;
+
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tabs[0]) {
+      state.currentUrl = tabs[0].url || '';
+      state.sessionStartTime = Date.now();
+      await setActiveState(state);
+      console.log('Tracking on:', state.currentUrl);
+    }
+  } catch (error) {
+    console.error('Error updating current tab:', error);
+  }
+}
+
+// ============================================================================
+// TAB TRACKING
+// ============================================================================
+
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  const state = await getActiveState();
+  if (!state) return;
+
   const tab = await chrome.tabs.get(activeInfo.tabId);
   await handleTabSwitch(tab);
 });
 
-// Track tab updates (URL changes)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  const state = await getActiveState();
+  if (!state) return;
+
   if (changeInfo.status === 'complete' && tab.active) {
     await handleTabSwitch(tab);
   }
 });
 
-// Handle tab switches and time tracking
 async function handleTabSwitch(tab) {
+  const state = await getActiveState();
+  if (!state) return;
+
   const now = Date.now();
   const newUrl = tab.url || '';
-  const newTabId = tab.id;
-  
-  // End tracking on previous tab
-  if (currentUrl && sessionStartTime) {
-    const timeSpent = now - sessionStartTime;
-    await updateSiteTime(currentUrl, timeSpent);
+
+  // Save time spent on previous tab
+  if (state.currentUrl && state.sessionStartTime) {
+    const timeSpent = now - state.sessionStartTime;
+    await updateSiteTime(state.currentUrl, timeSpent);
   }
-  
-  // Log the tab switch
-  const tabSwitch = {
-    timestamp: now,
-    fromTabId: currentTabId,
-    toTabId: newTabId,
-    fromUrl: currentUrl,
-    toUrl: newUrl
-  };
-  
-  activityData.tabSwitches.push(tabSwitch);
-  
-  // Update current tracking
-  currentTabId = newTabId;
-  currentUrl = newUrl;
-  sessionStartTime = now;
-  
-  // Save to storage
-  await chrome.storage.local.set({ activityData });
-  
-  console.log('Tab switch:', tabSwitch);
+
+  // Increment tab switch counter
+  state.task.tabSwitches++;
+
+  // Update to new tab
+  state.currentUrl = newUrl;
+  state.sessionStartTime = now;
+
+  await setActiveState(state);
+  console.log('Tab switch recorded for task:', state.task.taskName);
 }
 
-// Update time spent on a site
 async function updateSiteTime(url, timeSpent) {
+  const state = await getActiveState();
+  if (!state) return;
+
   try {
     const hostname = new URL(url).hostname;
-    const data = await chrome.storage.local.get('trackedSites');
-    const trackedSites = data.trackedSites || [];
-    
-    // Check if this site should be tracked
-    const isTracked = trackedSites.some(site => hostname.includes(site));
-    
-    if (isTracked) {
-      if (!activityData.siteTime[hostname]) {
-        activityData.siteTime[hostname] = 0;
-      }
-      activityData.siteTime[hostname] += timeSpent;
-      
-      console.log(`Time on ${hostname}: ${activityData.siteTime[hostname]}ms`);
+
+    if (!state.task.siteTime[hostname]) {
+      state.task.siteTime[hostname] = 0;
     }
+    state.task.siteTime[hostname] += timeSpent;
+    state.task.totalActiveTime += timeSpent;
+
+    await setActiveState(state);
+    console.log(`Time on ${hostname}: ${state.task.siteTime[hostname]}ms`);
   } catch (error) {
     console.error('Error updating site time:', error);
   }
 }
 
-// Listen for messages from popup
+// ============================================================================
+// MESSAGE HANDLING
+// ============================================================================
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'startTask') {
-    startTask(request.taskName);
-    sendResponse({ success: true });
-  } else if (request.action === 'endTask') {
-    endTask();
-    sendResponse({ success: true });
-  } else if (request.action === 'getStats') {
-    getStats().then(stats => sendResponse(stats));
-    return true; // Will respond asynchronously
-  }
+  handleMessage(request).then(sendResponse);
+  return true; // Keep message channel open for async response
 });
 
-// Start a task
-function startTask(taskName) {
-  currentTask = taskName;
-  taskStartTime = Date.now();
-  
-  chrome.storage.local.set({
-    currentTask: taskName,
-    taskStartTime: taskStartTime
-  });
-  
+async function handleMessage(request) {
+  switch (request.action) {
+    case 'startTask':
+      await startTask(request.taskName);
+      return { success: true };
+
+    case 'pauseTask':
+      await pauseCurrentTask();
+      return { success: true };
+
+    case 'resumeTask':
+      await resumeTask(request.taskName);
+      return { success: true };
+
+    case 'endTask':
+      await endTask();
+      return { success: true };
+
+    case 'deleteTask':
+      await deleteTask(request.taskName);
+      return { success: true };
+
+    case 'getStats':
+      return await getStats();
+
+    default:
+      return { success: false, error: 'Unknown action' };
+  }
+}
+
+// ============================================================================
+// TASK MANAGEMENT
+// ============================================================================
+
+async function startTask(taskName) {
+  // If there's already an active task, pause it first
+  const existingState = await getActiveState();
+  if (existingState) {
+    await pauseCurrentTask();
+  }
+
+  const task = {
+    taskName: taskName,
+    startTimestamp: Date.now(),
+    totalActiveTime: 0,
+    tabSwitches: 0,
+    siteTime: {},
+    pauseIntervals: []
+  };
+
+  // Get current tab
+  let currentUrl = '';
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tabs[0]) {
+      currentUrl = tabs[0].url || '';
+    }
+  } catch (error) {
+    console.error('Error getting current tab:', error);
+  }
+
+  const state = {
+    task: task,
+    sessionStartTime: Date.now(),
+    currentUrl: currentUrl
+  };
+
+  await setActiveState(state);
+  // await openTimerWindow();
+
   console.log('Task started:', taskName);
 }
 
-// End a task
-async function endTask() {
-  if (currentTask && taskStartTime) {
-    const taskSession = {
-      taskName: currentTask,
-      startTime: taskStartTime,
-      endTime: Date.now(),
-      duration: Date.now() - taskStartTime,
-      tabSwitches: activityData.tabSwitches.filter(
-        sw => sw.timestamp >= taskStartTime
-      ).length
-    };
-    
-    activityData.taskSessions.push(taskSession);
-    
-    await chrome.storage.local.set({
-      activityData,
-      currentTask: null,
-      taskStartTime: null
-    });
-    
-    currentTask = null;
-    taskStartTime = null;
-    
-    console.log('Task ended:', taskSession);
+async function pauseCurrentTask() {
+  const state = await getActiveState();
+  if (!state) return;
+
+  const now = Date.now();
+
+  // Save time spent on current tab
+  if (state.currentUrl && state.sessionStartTime) {
+    const timeSpent = now - state.sessionStartTime;
+    await updateSiteTime(state.currentUrl, timeSpent);
   }
+
+  // Record the pause
+  state.task.pauseIntervals.push({
+    pausedAt: now,
+    resumedAt: null
+  });
+
+  // Move to paused tasks
+  const data = await chrome.storage.local.get('pausedTasks');
+  const pausedTasks = data.pausedTasks || [];
+  pausedTasks.push(state.task);
+
+  await chrome.storage.local.set({ pausedTasks });
+  await clearActiveState();
+  // await closeTimerWindow();
+
+  console.log('Task paused:', state.task.taskName);
 }
 
-// Get current statistics
-async function getStats() {
-  const data = await chrome.storage.local.get(['currentTask', 'taskStartTime']);
-  
-  let currentTaskTime = 0;
-  let currentTaskSwitches = 0;
-  
-  if (data.currentTask && data.taskStartTime) {
-    currentTaskTime = Date.now() - data.taskStartTime;
-    currentTaskSwitches = activityData.tabSwitches.filter(
-      sw => sw.timestamp >= data.taskStartTime
-    ).length;
+async function resumeTask(taskName) {
+  // CRITICAL FIX: Pause current task FIRST, then get fresh pausedTasks data
+  const existingState = await getActiveState();
+  if (existingState) {
+    await pauseCurrentTask();
   }
-  
+
+  // Get fresh data AFTER pausing (this fixes the bug)
+  const data = await chrome.storage.local.get('pausedTasks');
+  const pausedTasks = data.pausedTasks || [];
+
+  const taskIndex = pausedTasks.findIndex(t => t.taskName === taskName);
+  if (taskIndex === -1) {
+    console.error('Paused task not found:', taskName);
+    return;
+  }
+
+  // Remove from paused tasks
+  const [task] = pausedTasks.splice(taskIndex, 1);
+
+  // Mark the pause interval as resumed
+  const lastPause = task.pauseIntervals[task.pauseIntervals.length - 1];
+  if (lastPause && !lastPause.resumedAt) {
+    lastPause.resumedAt = Date.now();
+  }
+
+  // Get current tab
+  let currentUrl = '';
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tabs[0]) {
+      currentUrl = tabs[0].url || '';
+    }
+  } catch (error) {
+    console.error('Error getting current tab:', error);
+  }
+
+  const state = {
+    task: task,
+    sessionStartTime: Date.now(),
+    currentUrl: currentUrl
+  };
+
+  await setActiveState(state);
+  await chrome.storage.local.set({ pausedTasks });
+  // await openTimerWindow();
+
+  console.log('Task resumed:', taskName);
+}
+
+async function deleteTask(taskName) {
+  const data = await chrome.storage.local.get('pausedTasks');
+  const pausedTasks = data.pausedTasks || [];
+
+  const filteredTasks = pausedTasks.filter(t => t.taskName !== taskName);
+  await chrome.storage.local.set({ pausedTasks: filteredTasks });
+
+  console.log('Task deleted:', taskName);
+  // No notification shown (as requested in plan.md)
+}
+
+async function endTask() {
+  const state = await getActiveState();
+  if (!state) {
+    console.error('No active task to end');
+    return;
+  }
+
+  const now = Date.now();
+
+  // Save time spent on current tab
+  if (state.currentUrl && state.sessionStartTime) {
+    const timeSpent = now - state.sessionStartTime;
+    await updateSiteTime(state.currentUrl, timeSpent);
+  }
+
+  // Get final state with updated time
+  const finalState = await getActiveState();
+  const task = finalState.task;
+
+  // Calculate focus score and process site time
+  const focusScore = calculateFocusScore(task);
+  const siteTimeProcessed = processSiteTime(task.siteTime);
+
+  // Send to API
+  await sendTaskToAPI(task, focusScore, siteTimeProcessed);
+
+  // Clear active task
+  await clearActiveState();
+  // await closeTimerWindow();
+
+  console.log('Task completed and sent to API:', task.taskName);
+}
+
+// ============================================================================
+// TIMER WINDOW (Disabled for now)
+// ============================================================================
+
+// async function openTimerWindow() {
+//   const existingWindow = await chrome.storage.local.get('timerWindowId');
+
+//   if (existingWindow.timerWindowId) {
+//     try {
+//       await chrome.windows.update(existingWindow.timerWindowId, { focused: true });
+//       return;
+//     } catch (error) {
+//       // Window doesn't exist anymore
+//     }
+//   }
+
+//   const window = await chrome.windows.create({
+//     url: 'timer-window.html',
+//     type: 'popup',
+//     width: 280,
+//     height: 170,
+//     top: 50,
+//     left: screen.width - 330,
+//     focused: false
+//   });
+
+//   await chrome.storage.local.set({ timerWindowId: window.id });
+// }
+
+// async function closeTimerWindow() {
+//   const existingWindow = await chrome.storage.local.get('timerWindowId');
+
+//   if (existingWindow.timerWindowId) {
+//     try {
+//       await chrome.windows.remove(existingWindow.timerWindowId);
+//     } catch (error) {
+//       // Window already closed
+//     }
+//     await chrome.storage.local.remove('timerWindowId');
+//   }
+// }
+
+// ============================================================================
+// STATISTICS
+// ============================================================================
+
+async function getStats() {
+  const data = await chrome.storage.local.get(['activeTaskState', 'pausedTasks']);
+
+  let activeTask = null;
+
+  if (data.activeTaskState) {
+    // Clone the task and add current session time
+    activeTask = JSON.parse(JSON.stringify(data.activeTaskState.task));
+
+    if (data.activeTaskState.currentUrl && data.activeTaskState.sessionStartTime) {
+      const currentSessionTime = Date.now() - data.activeTaskState.sessionStartTime;
+
+      try {
+        const hostname = new URL(data.activeTaskState.currentUrl).hostname;
+
+        if (!activeTask.siteTime[hostname]) {
+          activeTask.siteTime[hostname] = 0;
+        }
+        activeTask.siteTime[hostname] += currentSessionTime;
+        activeTask.totalActiveTime += currentSessionTime;
+      } catch (error) {
+        console.error('Error calculating current session time:', error);
+      }
+    }
+  }
+
   return {
-    currentTask: data.currentTask || null,
-    currentTaskTime,
-    currentTaskSwitches,
-    totalTabSwitches: activityData.tabSwitches.length,
-    siteTime: activityData.siteTime,
-    recentSwitches: activityData.tabSwitches.slice(-10)
+    activeTask: activeTask,
+    pausedTasks: data.pausedTasks || [],
+    isTracking: !!data.activeTaskState
   };
 }
 
-// Send activity data to server every 30 seconds
-setInterval(async () => {
-  await sendActivityData();
-}, 30000);
+// ============================================================================
+// FOCUS SCORE & DATA PROCESSING
+// ============================================================================
 
-// Send activity data to localhost:8000/api/activity CURRENYLY NO NEED FOR THIS 
-async function sendActivityData() {
-  try {
-    const data = await chrome.storage.local.get(['currentTask', 'taskStartTime']);
-    /*
-    const payload = {
-      timestamp: Date.now(),
-      currentTask: data.currentTask || null,
-      taskStartTime: data.taskStartTime || null,
-      tabSwitches: activityData.tabSwitches,
-      siteTime: activityData.siteTime,
-      taskSessions: activityData.taskSessions,
-      currentUrl: currentUrl,
-      currentTabId: currentTabId
-    };
-    */
-   // below is trying to integrate with amishs code
-    const payload = {
-      task_name: data.currentTask || null,
-      domain: currentUrl,
-      title: currentUrl,
-      duration_ms: 99999,
-      focus_score: 50,
-      tab_switches: 5,
-      timestamp: Date.now(),
-    };
-    // task_name, domain, title, duration_ms, focus_score
-    // tab_switches, timestamp
-    
-    const response = await fetch('http://localhost:8000/api/activity', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-    
-    if (response.ok) {
-      console.log('Activity data sent successfully');
-    } else {
-      console.error('Failed to send activity data:', response.status);
-    }
-  } catch (error) {
-    console.error('Error sending activity data:', error);
-  }
+function calculateFocusScore(task) {
+  let score = 100;
+
+  // Penalize for tab switches (>1 switch per minute)
+  const taskDurationMinutes = task.totalActiveTime / 60000;
+  const switchesPerMinute = task.tabSwitches / Math.max(taskDurationMinutes, 1);
+  score -= Math.min(switchesPerMinute * 5, 30);
+
+  // Penalize for pauses
+  score -= Math.min(task.pauseIntervals.length * 5, 20);
+
+  // Penalize for scattered focus (too many sites)
+  const uniqueSites = Object.keys(task.siteTime).length;
+  score -= Math.min(uniqueSites * 2, 20);
+
+  return Math.max(Math.round(score), 0);
 }
 
-// Handle extension startup - get current active tab
-chrome.runtime.onStartup.addListener(async () => {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tabs[0]) {
-    await handleTabSwitch(tabs[0]);
+function processSiteTime(siteTime) {
+  const FIVE_MINUTES_MS = 5 * 60 * 1000;
+  const processed = {};
+  let otherTime = 0;
+
+  for (const [site, time] of Object.entries(siteTime)) {
+    if (time < FIVE_MINUTES_MS) {
+      otherTime += time;
+    } else {
+      processed[site] = time;
+    }
   }
-});
+
+  if (otherTime > 0) {
+    processed['other'] = otherTime;
+  }
+
+  return processed;
+}
+
+async function sendTaskToAPI(task, focusScore, siteTimeProcessed) {
+  try {
+    let primaryDomain = 'unknown';
+    let maxTime = 0;
+
+    for (const [site, time] of Object.entries(task.siteTime)) {
+      if (time > maxTime) {
+        maxTime = time;
+        primaryDomain = site;
+      }
+    }
+
+    const payload = {
+      task_name: task.taskName,
+      domain: primaryDomain,
+      title: task.taskName,
+      duration_ms: task.totalActiveTime,
+      focus_score: focusScore,
+      tab_switches: task.tabSwitches,
+      timestamp: task.startTimestamp
+    };
+
+    const response = await fetch('http://localhost:8000/api/activity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (response.ok) {
+      console.log('Task data sent to API successfully');
+      console.log('Full site time data:', siteTimeProcessed);
+    } else {
+      console.error('Failed to send task data:', response.status);
+    }
+  } catch (error) {
+    console.error('Error sending task data:', error);
+  }
+}
