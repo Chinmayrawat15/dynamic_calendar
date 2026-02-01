@@ -2,11 +2,18 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+});
 
 export const metadata: Metadata = {
-  title: "FocusFlow - Productivity Tracking",
-  description: "Track your productivity with AI-powered predictions",
+  title: "Timely - Smart Productivity Tracking",
+  description: "Track your productivity with AI-powered predictions and insights",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
@@ -15,9 +22,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
-        <div className="min-h-screen bg-gray-50">
+    <html lang="en" className={inter.variable}>
+      <body className={`${inter.className} antialiased`}>
+        <div className="min-h-screen animated-gradient bg-pattern">
           {children}
         </div>
       </body>

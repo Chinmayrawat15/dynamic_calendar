@@ -17,10 +17,6 @@ const formatLocalDate = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-/**
- * Calendar component showing a month grid view and upcoming events list.
- * Integrates with Google Calendar API for real data.
- */
 export default function Calendar() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,7 +26,6 @@ export default function Calendar() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [addModalDate, setAddModalDate] = useState<Date | undefined>(undefined);
 
-  // Check authentication status
   const checkAuth = useCallback(async () => {
     try {
       const { authenticated } = await getCalendarAuthStatus();
@@ -43,13 +38,11 @@ export default function Calendar() {
     }
   }, []);
 
-  // Fetch events from Google Calendar
   const fetchEvents = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      // Get events for 2 months (current and next)
       const today = new Date();
       const startDate = new Date(today.getFullYear(), today.getMonth(), 1);
       const endDate = new Date(today.getFullYear(), today.getMonth() + 2, 0);
@@ -68,7 +61,6 @@ export default function Calendar() {
     }
   }, []);
 
-  // Initial load: check auth and fetch events
   useEffect(() => {
     const init = async () => {
       const authenticated = await checkAuth();
@@ -81,7 +73,6 @@ export default function Calendar() {
     init();
   }, [checkAuth, fetchEvents]);
 
-  // Auto-refresh calendar when active
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -105,23 +96,19 @@ export default function Calendar() {
     };
   }, [isAuthenticated, fetchEvents]);
 
-  // Handle Google Calendar authentication
   const handleConnectCalendar = () => {
     window.location.href = getCalendarAuthUrl();
   };
 
-  // Handle adding event
   const handleAddEvent = (date?: Date) => {
     setAddModalDate(date || selectedDate);
     setShowAddModal(true);
   };
 
-  // Handle event added - refresh the list
   const handleEventAdded = () => {
     fetchEvents();
   };
 
-  // Format time for display
   const formatTime = (isoString: string) => {
     const date = new Date(isoString);
     return date.toLocaleTimeString("en-US", {
@@ -131,7 +118,6 @@ export default function Calendar() {
     });
   };
 
-  // Format date for display
   const formatDate = (isoString: string) => {
     const date = new Date(isoString);
     const today = new Date();
@@ -151,28 +137,24 @@ export default function Calendar() {
     }
   };
 
-  // Get confidence badge color
   const getConfidenceColor = (predicted?: number, scheduled?: number) => {
-    if (!predicted || !scheduled) return "bg-gray-100 text-gray-600";
+    if (!predicted || !scheduled) return "badge-neutral";
     const diff = Math.abs(predicted - scheduled);
-    if (diff <= 5) return "bg-green-100 text-green-700";
-    if (diff <= 15) return "bg-yellow-100 text-yellow-700";
-    return "bg-red-100 text-red-700";
+    if (diff <= 5) return "badge-success";
+    if (diff <= 15) return "badge-warning";
+    return "badge-error";
   };
 
-  // Calculate scheduled duration
   const getScheduledDuration = (start: string, end: string) => {
     const startDate = new Date(start);
     const endDate = new Date(end);
     return Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60));
   };
 
-  // Filter upcoming events (from today onwards)
   const upcomingEvents = events
     .filter((event) => new Date(event.start) >= new Date(new Date().setHours(0, 0, 0, 0)))
     .slice(0, 10);
 
-  // Group events by date
   const groupedEvents = upcomingEvents.reduce((acc, event) => {
     const date = formatDate(event.start);
     if (!acc[date]) acc[date] = [];
@@ -180,33 +162,34 @@ export default function Calendar() {
     return acc;
   }, {} as Record<string, CalendarEvent[]>);
 
-  // Not authenticated - show connect button
   if (isAuthenticated === false) {
     return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <svg
-          className="w-16 h-16 text-gray-300 mb-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-          />
-        </svg>
-        <h3 className="text-lg font-medium text-gray-900 mb-2">
+      <div className="flex flex-col items-center justify-center py-16 animate-fade-in">
+        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center mb-6 shadow-soft">
+          <svg
+            className="w-10 h-10 text-primary-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
+          </svg>
+        </div>
+        <h3 className="text-xl font-semibold text-surface-900 mb-2">
           Connect Google Calendar
         </h3>
-        <p className="text-gray-500 text-center mb-6 max-w-sm">
+        <p className="text-surface-500 text-center mb-8 max-w-sm leading-relaxed">
           Connect your Google Calendar to see your events and get AI-powered
           duration predictions.
         </p>
         <button
           onClick={handleConnectCalendar}
-          className="btn btn-primary flex items-center gap-2"
+          className="btn btn-primary flex items-center gap-3 px-6 py-3"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path
@@ -232,38 +215,42 @@ export default function Calendar() {
     );
   }
 
-  // Loading state
   if (isLoading && isAuthenticated === null) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <svg
-          className="animate-spin h-8 w-8 text-primary-500"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-          />
-        </svg>
+      <div className="flex items-center justify-center py-16">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-primary-100 flex items-center justify-center">
+            <svg
+              className="animate-spin h-6 w-6 text-primary-600"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              />
+            </svg>
+          </div>
+          <p className="text-sm text-surface-500 font-medium">Loading calendar...</p>
+        </div>
       </div>
     );
   }
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
         {/* Left: Calendar Grid */}
-        <div className="min-h-[400px] bg-white rounded-lg border border-gray-100 p-4">
+        <div className="min-h-[420px] bg-white/60 backdrop-blur-sm rounded-2xl border border-surface-100 p-5 shadow-soft">
           <GoogleCalendarGrid
             events={events}
             selectedDate={selectedDate}
@@ -273,18 +260,21 @@ export default function Calendar() {
         </div>
 
         {/* Right: Upcoming Events List */}
-        <div className="min-h-[400px] flex flex-col bg-white rounded-lg border border-gray-100 p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Upcoming Events
-            </h3>
+        <div className="min-h-[420px] flex flex-col bg-white/60 backdrop-blur-sm rounded-2xl border border-surface-100 p-5 shadow-soft">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="text-lg font-semibold text-surface-900">
+                Upcoming Events
+              </h3>
+              <p className="text-xs text-surface-500 mt-0.5">Your schedule at a glance</p>
+            </div>
             <button
               onClick={() => fetchEvents()}
-              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+              className="icon-btn"
               title="Refresh events"
             >
               <svg
-                className={`w-4 h-4 text-gray-500 ${isLoading ? "animate-spin" : ""}`}
+                className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -300,15 +290,15 @@ export default function Calendar() {
           </div>
 
           {error && (
-            <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm mb-4">
+            <div className="p-3 bg-danger-50 text-danger-700 rounded-xl text-sm mb-4 border border-danger-200">
               {error}
             </div>
           )}
 
-          <div className="flex-1 overflow-auto space-y-4">
+          <div className="flex-1 overflow-auto space-y-5 pr-1">
             {Object.entries(groupedEvents).map(([date, dateEvents]) => (
-              <div key={date}>
-                <h4 className="text-sm font-semibold text-gray-500 mb-2">
+              <div key={date} className="animate-fade-in-up">
+                <h4 className="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-2">
                   {date}
                 </h4>
                 <div className="space-y-2">
@@ -320,30 +310,23 @@ export default function Calendar() {
                     return (
                       <div
                         key={event.id}
-                        className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                        className="flex items-start gap-3 p-3 bg-surface-50 rounded-xl hover:bg-surface-100 transition-all duration-200 cursor-pointer group"
                       >
-                        {/* Time */}
-                        <div className="text-sm text-gray-500 w-20 flex-shrink-0">
+                        <div className="text-sm text-surface-500 w-16 flex-shrink-0 font-medium">
                           {formatTime(event.start)}
                         </div>
 
-                        {/* Event details */}
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900 truncate">
+                          <p className="font-medium text-surface-900 truncate group-hover:text-primary-700 transition-colors">
                             {event.title}
                           </p>
-                          <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <span className="text-xs text-gray-500">
-                              {scheduledMinutes} min scheduled
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            <span className="text-xs text-surface-500 bg-surface-100 px-2 py-0.5 rounded-md">
+                              {scheduledMinutes}m
                             </span>
                             {event.predicted_duration && (
-                              <span
-                                className={`text-xs px-2 py-0.5 rounded-full ${getConfidenceColor(
-                                  event.predicted_duration,
-                                  scheduledMinutes
-                                )}`}
-                              >
-                                ~{event.predicted_duration} min predicted
+                              <span className={`badge ${getConfidenceColor(event.predicted_duration, scheduledMinutes)}`}>
+                                ~{event.predicted_duration}m predicted
                               </span>
                             )}
                           </div>
@@ -356,32 +339,34 @@ export default function Calendar() {
             ))}
 
             {upcomingEvents.length === 0 && !isLoading && (
-              <div className="text-center py-8 text-gray-400">
-                <svg
-                  className="w-12 h-12 mx-auto mb-2"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                  />
-                </svg>
-                <p>No upcoming events</p>
+              <div className="text-center py-12">
+                <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
+                  <svg
+                    className="w-8 h-8 text-surface-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    />
+                  </svg>
+                </div>
+                <p className="text-surface-600 font-medium">No upcoming events</p>
+                <p className="text-surface-400 text-sm mt-1">Your schedule is clear</p>
               </div>
             )}
           </div>
 
-          {/* Add Event Button */}
           <button
             onClick={() => handleAddEvent()}
-            className="mt-4 w-full btn btn-secondary text-sm"
+            className="mt-4 w-full btn btn-secondary group"
           >
             <svg
-              className="w-4 h-4 mr-2"
+              className="w-4 h-4 group-hover:scale-110 transition-transform"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -398,7 +383,6 @@ export default function Calendar() {
         </div>
       </div>
 
-      {/* Add Event Modal */}
       <AddEventModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
