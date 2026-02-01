@@ -1,12 +1,15 @@
-// so the plan is as follows
+BUGS
 
-the activity chrome extension exists
+Dynamically updating theh windoiw -> when new task started / paused. Timers for single sites not updating dyanmically
 
-we can tell what site users are on, and can track the time spent at each of those sites
+when u resume a task while a task is still going on, it accidently removes the current task instead of pausing
 
-we need to maintain that information somewhere, somehow. a list of timestamps in a file is one way 
+i want to move the active task green UI to the top
 
-however we can also maintain overall time spent per day in a dict like format. we would create an other category for small percentage. 
+I dont want chrome notifs on hitting certain actions (delete)
 
-now the data is sitting locally on our js file. how often do we send data to our local backend?
+FEATURE (dont do, firrst focus on bugs)
 
+dont count moving back to most active tab as a tabswitch increase. 
+
+timer-window (we will work on this at the end)
