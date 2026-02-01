@@ -46,10 +46,17 @@ class ChatContext(BaseModel):
     conservativity: float = Field(default=0.5, ge=0, le=1)
 
 
+class HistoryMessage(BaseModel):
+    """A single message in the conversation history."""
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class ChatRequest(BaseModel):
     """Chat message from frontend."""
     message: str
     context: ChatContext = ChatContext()
+    history: list[HistoryMessage] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):
