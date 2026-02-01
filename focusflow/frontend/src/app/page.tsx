@@ -6,38 +6,64 @@ import StatsCards from "@/components/StatsCards";
 import ResizableChatPanel from "@/components/ResizableChatPanel";
 import Calendar from "@/components/Calendar";
 import ConservativitySlider from "@/components/ConservativitySlider";
+import { getStats, getSettings, updateSettings } from "@/lib/api";
 import type { StatsResponse } from "@/lib/types";
 
 /**
  * Main Dashboard Page
- * TODO: Person C - Wire up real API calls and add loading states
+ * Fetches real stats from the backend and syncs settings.
  */
 export default function Dashboard() {
-  // TODO: Person C - Fetch from API
   const [stats, setStats] = useState<StatsResponse>({
-    today_focus_score: 73,
-    hours_tracked_today: 4.5,
-    prediction_accuracy_percent: 82,
-    total_sessions: 47,
+    today_focus_score: 0,
+    hours_tracked_today: 0,
+    prediction_accuracy_percent: 0,
+    total_sessions: 0,
   });
-
+  const [isLoading, setIsLoading] = useState(true);
   const [conservativity, setConservativity] = useState(0.5);
   const [currentTask, setCurrentTask] = useState<string | undefined>(undefined);
 
-  // TODO: Person C - Fetch real stats on mount
-  // useEffect(() => {
-  //   const fetchStats = async () => {
-  //     try {
-  //       const data = await getStats();
-  //       setStats(data);
-  //     } catch (error) {
-  //       console.error("Failed to fetch stats:", error);
-  //     }
-  //   };
-  //   fetchStats();
-  //   const interval = setInterval(fetchStats, 30000);
-  //   return () => clearInterval(interval);
-  // }, []);
+  // Fetch stats on mount and refresh every 30 seconds
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const data = await getStats();
+        setStats(data);
+      } catch (error) {
+        console.error("Failed to fetch stats:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStats();
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch settings on mount
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const settings = await getSettings();
+        setConservativity(settings.conservativity);
+      } catch (error) {
+        console.error("Failed to fetch settings:", error);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  // Save conservativity when it changes
+  const handleConservativityChange = async (value: number) => {
+    setConservativity(value);
+    try {
+      await updateSettings({ conservativity: value });
+    } catch (error) {
+      console.error("Failed to save settings:", error);
+    }
+  };
 
   return (
     <div className="flex h-screen">
@@ -59,7 +85,17 @@ export default function Dashboard() {
 
             {/* Stats Cards */}
             <div className="mb-6">
-              <StatsCards stats={stats} />
+              {isLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="card animate-pulse">
+                      <div className="h-16 bg-gray-200 rounded"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <StatsCards stats={stats} />
+              )}
             </div>
 
             {/* Conservativity Slider */}
@@ -68,7 +104,7 @@ export default function Dashboard() {
                 <h2 className="text-lg font-semibold mb-4">Prediction Settings</h2>
                 <ConservativitySlider
                   value={conservativity}
-                  onChange={setConservativity}
+                  onChange={handleConservativityChange}
                 />
               </div>
             </div>
