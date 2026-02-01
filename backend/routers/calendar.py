@@ -1,14 +1,180 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from backend.database import get_db, CATEGORIES
-from backend.services.calendar_service import get_upcoming_events, create_calendar_event
+from backend.services.calendar_service import get_upcoming_events, create_calendar_event, check_calendar_setup, get_calendar_service
 from backend.services.prediction_engine import get_prediction
-from backend.services.keywords_ai_service import generate_response
-from backend.schemas import CalendarEvent, CalendarEventCreate, WeekPlanEvent, WeekPlanResponse
-from datetime import datetime, timedelta, timezone
+from backend.services.keywords_ai_service import generate_response, generate_structured_response
+from backend.schemas import CalendarEvent, CalendarEventCreate, WeekPlanEvent, WeekPlanResponse, ScheduleRequest, ScheduleResponse, ScheduledEvent
+from datetime import datetime, timezone, timedelta
 import dateutil.parser
 
+
+# ... (existing imports)
 router = APIRouter()
+
+@router.get("/calendar/setup-status")
+def get_calendar_setup_status():
+    """
+    Returns the setup status of the Google Calendar integration.
+    """
+    return check_calendar_setup()
+
+@router.post("/calendar/schedule", response_model=ScheduleResponse)
+async def schedule_from_prompt(request: ScheduleRequest, db: Session = Depends(get_db)):
+    """
+    Interprets natural language prompts to schedule events.
+    Uses Keywords AI to parse intent and extract structured event data.
+    """
+    # Check if calendar service is available first
+    if not get_calendar_service():
+        return ScheduleResponse(
+            events=[],
+            frontend_message="Google Calendar is not configured. Please check the backend setup."
+        )
+
+    now_utc = datetime.now(timezone.utc).isoformat()
+    
+    # User-defined System Prompt
+    system_instruction = (
+        f"You are a backend assistant for FocusFlow's calendar scheduling system. Your task is to convert a user's natural language scheduling request into **structured, actionable JSON events** that can be directly used to create Google Calendar events. **Everything else is irrelevant.**\n\n"
+        f"Follow these instructions **exactly**:\n\n"
+        f"1. **JSON Only**: Output must be a strict JSON object. Do NOT include explanations, markdown, comments, or extra text. If you cannot infer times, provide an empty array but always include the `frontend_message`.\n\n"
+        f"2. **Required Fields per Event**:\n"
+        f"   - \"summary\" (string): event title\n"
+        f"   - \"start_time\" (ISO8601 UTC string)\n"
+        f"   - \"duration_minutes\" (integer)\n"
+        f"   - Optional: \"description\" (string), \"location\" (string), \"attendees\" (list of emails), \"priority\" (low/medium/high), \"tags\" (list of strings)\n\n"
+        f"3. **Ambiguous Times**: If a user specifies vague times, use these defaults (all in UTC):\n"
+        f"   - Lunch → 12:30 PM\n"
+        f"   - Dinner → 19:00\n"
+        f"   - Study / Work session → 18:00\n"
+        f"   - Club / Leisure → 20:00\n"
+        f"   - Meetings → 10:00 AM\n\n"
+        f"4. **Recurring / Multiple Events**:\n"
+        f"   - For recurring events (e.g., \"study each evening\"), create one event per day for each occurrence within the next 7 days.\n\n"
+        f"5. **Conservatism**:\n"
+        f"   - The user may provide a `conservatism` factor (0-1) that adjusts event durations:\n"
+        f"     `duration_minutes = estimated_duration_minutes * (1 + conservatism)`\n\n"
+        f"6. **Output Schema**: Your JSON must exactly match:\n"
+        f"```json\n"
+        f"{{\n"
+        f"  \"events\": [\n"
+        f"    {{\n"
+        f"      \"summary\": \"string\",\n"
+        f"      \"start_time\": \"ISO8601 string in UTC\",\n"
+        f"      \"duration_minutes\": 0,\n"
+        f"      \"description\": \"string (optional)\",\n"
+        f"      \"location\": \"string (optional)\",\n"
+        f"      \"attendees\": [\"string (optional)\"],\n"
+        f"      \"priority\": \"string (optional: low/medium/high)\",\n"
+        f"      \"tags\": [\"string (optional)\"]\n"
+        f"    }}\n"
+        f"  ],\n"
+        f"  \"frontend_message\": \"string (concise, user-friendly summary)\"\n"
+        f"}}\n"
+        f"Always return events array, never leave it undefined. Use defaults for ambiguous times if necessary.\n\n"
+        f"**Current UTC time:** {now_utc}\n"
+        f"**User Prompt:** \"{request.user_prompt}\"\n"
+        f"**Conservatism Factor:** {request.conservatism}"
+    )
+    
+    # We use generate_structured_response to ensure clean JSON parsing
+    # The prompt itself is very detailed, so we pass a minimal schema description or just the prompt.
+    # The function expects (prompt, schema_desc), but our prompt embeds the schema.
+    # We'll pass the prompt as the 'prompt' and a simplified reminder as 'schema_desc'.
+    
+    schema_reminder = """
+    {
+      "events": [{"summary": "...", "start_time": "...", "duration_minutes": ...}],
+      "frontend_message": "..."
+    }
+    """
+    
+    response_data = await generate_structured_response(system_instruction, schema_reminder)
+    
+    if not response_data or "events" not in response_data:
+        return ScheduleResponse(
+            events=[],
+            frontend_message="I couldn't understand that request. Could you be more specific about the time?"
+        )
+        
+    # Transform to Google Calendar format and create events
+    scheduled_events = []
+    
+    for event_data in response_data.get("events", []):
+        try:
+            # Parse start time from ISO string
+            start_dt = dateutil.parser.isoparse(event_data["start_time"])
+            
+            # Create event in Google Calendar
+            # We map the AI's output to the service function's parameters
+            google_event = create_calendar_event(
+                summary=event_data["summary"],
+                start_time=start_dt,
+                duration_minutes=event_data["duration_minutes"],
+                description=event_data.get("description", "")
+            )
+            
+            if google_event:
+                # Construct the response object
+                # We preserve fields like location/attendees in the response 
+                # even if the basic create_calendar_event service doesn't use them yet
+                scheduled_events.append(ScheduledEvent(
+                    summary=event_data["summary"],
+                    start_time=start_dt,
+                    duration_minutes=event_data["duration_minutes"],
+                    description=event_data.get("description", ""),
+                    location=event_data.get("location", ""),
+                    attendees=event_data.get("attendees", []),
+                    priority=event_data.get("priority", "medium"),
+                    tags=event_data.get("tags", [])
+                ))
+        except Exception as e:
+            # Log error but continue processing other events
+            print(f"Error creating event '{event_data.get('summary', 'Unknown')}': {e}")
+            continue
+
+    return ScheduleResponse(
+        events=scheduled_events,
+        frontend_message=response_data.get("frontend_message", "Here are your scheduled events.")
+    )
+
+
+def transform_to_google_calendar(event: dict) -> dict:
+    """
+    Transforms a structured AI event into a Google Calendar API-friendly format.
+    """
+    try:
+        # 1. Parse Start Time (Assume UTC if naive)
+        start_str = event.get("start_time")
+        if not start_str:
+            return {}
+            
+        start_dt = dateutil.parser.parse(start_str)
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=timezone.utc)
+            
+        # 2. Calculate End Time
+        duration_minutes = event.get("duration_minutes", 30)
+        end_dt = start_dt + timedelta(minutes=duration_minutes)
+        
+        # 3. Construct Google Calendar Event Dict
+        google_event = {
+            "summary": event.get("summary", "New Event"),
+            "start": {"dateTime": start_dt.isoformat()},
+            "end": {"dateTime": end_dt.isoformat()},
+            "description": event.get("description", ""),
+            "location": event.get("location", ""),
+            "attendees": [{"email": email} for email in event.get("attendees", [])],
+            # Reminders can be default
+            "reminders": {"useDefault": True}
+        }
+        
+        return google_event
+    except Exception as e:
+        print(f"Error transforming event {event.get('summary', 'Unknown')}: {e}")
+        return {}
+
 
 def categorize_text(text: str) -> str:
     text = text.lower()

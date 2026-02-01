@@ -2,8 +2,10 @@ import httpx
 import os
 import logging
 import json
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+load_dotenv()
 
 KEYWORDS_AI_API_URL = os.getenv("KEYWORDS_AI_API_URL", "https://api.keywordsai.co/api/generate") # Example URL
 KEYWORDS_AI_API_KEY = os.getenv("KEYWORDS_AI_API_KEY", "")

@@ -52,7 +52,7 @@ This is the backend service for FocusFlow, built with FastAPI. It handles data p
 Start the development server:
 
 ```bash
-uvicorn main:app --reload --port 8000
+uvicorn backend.main:app --reload --port 8000 (run this in root directory of the project)
 ```
 
 The backend will be available at `http://localhost:8000`.
