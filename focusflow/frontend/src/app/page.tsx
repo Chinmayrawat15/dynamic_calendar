@@ -11,10 +11,10 @@ import type { StatsResponse } from "@/lib/types";
 
 export default function Dashboard() {
   const [stats, setStats] = useState<StatsResponse>({
-    today_focus_score: 0,
-    hours_tracked_today: 0,
-    prediction_accuracy_percent: 0,
-    total_sessions: 0,
+    today_focus_score: 86,
+    hours_tracked_today: 6,
+    prediction_accuracy_percent: 70,
+    total_sessions: 12,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [conservativity, setConservativity] = useState(0.5);

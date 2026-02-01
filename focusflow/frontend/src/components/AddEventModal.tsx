@@ -81,7 +81,7 @@ export default function AddEventModal({
       />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-soft-xl w-full max-w-md animate-scale-in">
+      <div className="relative z-50 bg-white rounded-2xl shadow-soft-xl w-full max-w-md animate-scale-in">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-surface-100">
           <div className="flex items-center gap-3">
