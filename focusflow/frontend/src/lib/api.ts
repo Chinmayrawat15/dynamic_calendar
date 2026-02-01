@@ -109,6 +109,21 @@ export async function getStats(): Promise<StatsResponse> {
 // ============================================================
 
 /**
+ * Check if the user is authenticated with Google Calendar.
+ */
+export async function getCalendarAuthStatus(): Promise<{ authenticated: boolean }> {
+  return apiFetch<{ authenticated: boolean }>("/api/calendar/status");
+}
+
+/**
+ * Get the Google Calendar authentication URL.
+ * User should be redirected to this URL to authenticate.
+ */
+export function getCalendarAuthUrl(): string {
+  return `${API_URL}/api/calendar/auth`;
+}
+
+/**
  * Get calendar events for a date range.
  */
 export async function getCalendarEvents(
