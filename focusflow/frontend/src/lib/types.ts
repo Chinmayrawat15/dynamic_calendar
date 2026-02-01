@@ -99,6 +99,7 @@ export interface CreateEventRequest {
   title: string;
   start: string;
   end: string;
+  time_zone?: string;
   description?: string;
 }
 

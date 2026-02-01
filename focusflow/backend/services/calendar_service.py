@@ -153,6 +153,7 @@ class CalendarService:
         title: str,
         start: str,
         end: str,
+        time_zone: Optional[str] = None,
         description: Optional[str] = None
     ) -> dict:
         """
@@ -164,9 +165,13 @@ class CalendarService:
 
         event = {
             "summary": title,
-            "start": {"dateTime": start, "timeZone": "UTC"},
-            "end": {"dateTime": end, "timeZone": "UTC"},
+            "start": {"dateTime": start},
+            "end": {"dateTime": end},
         }
+
+        if time_zone:
+            event["start"]["timeZone"] = time_zone
+            event["end"]["timeZone"] = time_zone
 
         if description:
             event["description"] = description
