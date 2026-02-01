@@ -10,6 +10,13 @@ import {
 import GoogleCalendarGrid from "./GoogleCalendarGrid";
 import AddEventModal from "./AddEventModal";
 
+const formatLocalDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 /**
  * Calendar component showing a month grid view and upcoming events list.
  * Integrates with Google Calendar API for real data.
@@ -48,8 +55,8 @@ export default function Calendar() {
       const endDate = new Date(today.getFullYear(), today.getMonth() + 2, 0);
 
       const { events: fetchedEvents } = await getCalendarEvents(
-        startDate.toISOString().split("T")[0],
-        endDate.toISOString().split("T")[0]
+        formatLocalDate(startDate),
+        formatLocalDate(endDate)
       );
 
       setEvents(fetchedEvents);
@@ -73,6 +80,30 @@ export default function Calendar() {
     };
     init();
   }, [checkAuth, fetchEvents]);
+
+  // Auto-refresh calendar when active
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const refreshInterval = window.setInterval(() => {
+      fetchEvents();
+    }, 60_000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchEvents();
+      }
+    };
+
+    window.addEventListener("focus", fetchEvents);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.clearInterval(refreshInterval);
+      window.removeEventListener("focus", fetchEvents);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [isAuthenticated, fetchEvents]);
 
   // Handle Google Calendar authentication
   const handleConnectCalendar = () => {

@@ -3,6 +3,13 @@
 import { useState } from "react";
 import { createCalendarEvent } from "@/lib/api";
 
+const formatLocalDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 interface AddEventModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -18,8 +25,7 @@ export default function AddEventModal({
 }: AddEventModalProps) {
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(
-    defaultDate?.toISOString().split("T")[0] ||
-      new Date().toISOString().split("T")[0]
+    formatLocalDate(defaultDate || new Date())
   );
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
@@ -40,6 +46,7 @@ export default function AddEventModal({
         title,
         start: startDateTime,
         end: endDateTime,
+        time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         description: description || undefined,
       });
 
